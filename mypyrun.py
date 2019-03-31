@@ -5,6 +5,7 @@ import subprocess
 import os
 import sys
 import re
+import fnmatch
 
 try:
     import configparser
@@ -23,62 +24,62 @@ CONFIG_FILES = (CONFIG_FILE,) + SHARED_CONFIG_FILES + USER_CONFIG_FILES
 # choose an exit that does not conflict with mypy's
 PARSING_FAIL = 100
 
-# _FILTERS = [
-#     # DEFINITION ERRORS --
-#     # Type annotation errors:
-#     ('invalid_syntax', 'syntax error in type comment'),
-#     ('not_defined', ' is not defined'),  # in seminal
-#     ('invalid_type_arguments', '(".*" expects .* type argument)'  # in typeanal
-#                                '(Optional.* must have exactly one type argument)'
-#                                '(is not subscriptable)'),
-#     ('generator_expected', 'The return type of a generator function should be '),  # in messages
-#     # Advanced signature errors:
-#     ('orphaned_overload', 'Overloaded .* will never be matched'),  # in messages
-#     ('already_defined', 'already defined'),  # in seminal
-#     # Signature incompatible with function internals:
-#     ('return_expected', 'Return value expected'),
-#     ('return_not_expected', 'No return value expected'),
-#     ('incompatible_return', 'Incompatible return value type'),
-#     ('incompatible_yield', 'Incompatible types in "yield"'),
-#     ('incompatible_arg', 'Argument .* has incompatible type'),
-#     ('incompatible_default_arg', 'Incompatible default for argument'),
-#     # Signature/class incompatible with super class:
-#     ('incompatible_subclass_signature', 'Signature .* incompatible with supertype'),
-#     ('incompatible_subclass_return', 'Return type .* incompatible with supertype'),
-#     ('incompatible_subclass_arg', 'Argument .* incompatible with supertype'),
-#     ('incompatible_subclass_attr', 'Incompatible types in assignment '
-#                                    '\(expression has type ".*", base class '
-#                                    '".*" defined the type as ".*"\)'),
-#
-#     # MISC --
-#     ('need_annotation', 'Need type annotation'),
-#     ('missing_module', 'Cannot find module '),
-#
-#     # USAGE ERRORS --
-#     # Special case Optional/None issues:
-#     ('no_attr_none_case', 'Item "None" of ".*" has no attribute'),
-#     ('incompatible_subclass_attr_none_case',
-#      'Incompatible types in assignment \(expression has type ".*", base class '
-#      '".*" defined the type as "None"\)'),
-#     # Other:
-#     ('incompatible_list_comprehension', 'List comprehension has incompatible type'),
-#     ('cannot_assign_to_method', 'Cannot assign to a method'),
-#     ('not_enough_arguments', 'Too few arguments'),
-#     ('not_callable', ' not callable'),
-#     ('no_attr', '.* has no attribute'),
-#     ('not_indexable', ' not indexable'),
-#     ('invalid_index', 'Invalid index type'),
-#     ('not_iterable', ' not iterable'),
-#     ('not_assignable_by_index', 'Unsupported target for indexed assignment'),
-#     ('no_matching_overload', 'No overload variant of .* matches argument type'),
-#     ('incompatible_assignment', 'Incompatible types in assignment'),
-#     ('invalid_return_assignment', 'does not return a value'),
-#     ('unsupported_operand', 'Unsupported .*operand '),
-#     ('abc_with_abstract_attr', "Cannot instantiate abstract class .* with abstract attribute"),
-# ]
-#
-# FILTERS = [(n, re.compile(s)) for n, s in _FILTERS]
-# FILTERS_SET = frozenset(n for n, s in FILTERS)
+_FILTERS = [
+    # DEFINITION ERRORS --
+    # Type annotation errors:
+    ('invalid_syntax', 'syntax error in type comment'),
+    ('not_defined', ' is not defined'),  # in seminal
+    ('invalid_type_arguments', '(".*" expects .* type argument)'  # in typeanal
+                               '(Optional.* must have exactly one type argument)'
+                               '(is not subscriptable)'),
+    ('generator_expected', 'The return type of a generator function should be '),  # in messages
+    # Advanced signature errors:
+    ('orphaned_overload', 'Overloaded .* will never be matched'),  # in messages
+    ('already_defined', 'already defined'),  # in seminal
+    # Signature incompatible with function internals:
+    ('return_expected', 'Return value expected'),
+    ('return_not_expected', 'No return value expected'),
+    ('incompatible_return', 'Incompatible return value type'),
+    ('incompatible_yield', 'Incompatible types in "yield"'),
+    ('incompatible_arg', 'Argument .* has incompatible type'),
+    ('incompatible_default_arg', 'Incompatible default for argument'),
+    # Signature/class incompatible with super class:
+    ('incompatible_subclass_signature', 'Signature .* incompatible with supertype'),
+    ('incompatible_subclass_return', 'Return type .* incompatible with supertype'),
+    ('incompatible_subclass_arg', 'Argument .* incompatible with supertype'),
+    ('incompatible_subclass_attr', 'Incompatible types in assignment '
+                                   '\(expression has type ".*", base class '
+                                   '".*" defined the type as ".*"\)'),
+
+    # MISC --
+    ('need_annotation', 'Need type annotation'),
+    ('missing_module', 'Cannot find module '),
+
+    # USAGE ERRORS --
+    # Special case Optional/None issues:
+    ('no_attr_none_case', 'Item "None" of ".*" has no attribute'),
+    ('incompatible_subclass_attr_none_case',
+     'Incompatible types in assignment \(expression has type ".*", base class '
+     '".*" defined the type as "None"\)'),
+    # Other:
+    ('incompatible_list_comprehension', 'List comprehension has incompatible type'),
+    ('cannot_assign_to_method', 'Cannot assign to a method'),
+    ('not_enough_arguments', 'Too few arguments'),
+    ('not_callable', ' not callable'),
+    ('no_attr', '.* has no attribute'),
+    ('not_indexable', ' not indexable'),
+    ('invalid_index', 'Invalid index type'),
+    ('not_iterable', ' not iterable'),
+    ('not_assignable_by_index', 'Unsupported target for indexed assignment'),
+    ('no_matching_overload', 'No overload variant of .* matches argument type'),
+    ('incompatible_assignment', 'Incompatible types in assignment'),
+    ('invalid_return_assignment', 'does not return a value'),
+    ('unsupported_operand', 'Unsupported .*operand '),
+    ('abc_with_abstract_attr', "Cannot instantiate abstract class .* with abstract attribute"),
+]
+
+FILTERS = [(n, re.compile(s)) for n, s in _FILTERS]
+FILTERS_SET = frozenset(n for n, s in FILTERS)
 
 COLORS = {
     'error': 'red',
@@ -95,11 +96,25 @@ class Options:
     Options like paths and mypy-options, which can be set via mypy are
     not recorded here.
     """
-    select = frozenset()
-    ignore = frozenset()
+    select = frozenset()  # type: Set[str]
+    ignore = frozenset()  # type: Set[str]
+    exclude = frozenset()  # type: Set[re.Pattern]
     color = True
     show_ignored = False
     show_error_keys = False
+
+
+def get_error_code(msg: str) -> Optional[str]:
+    for code, regex in FILTERS:
+        if regex.search(msg):
+            return code
+
+
+def is_excluded_path(path, options):
+    for regex in options.exclude:
+        if regex.search(path):
+            return True
+    return False
 
 
 def is_error(options: Options, error_code: str) -> bool:
@@ -114,7 +129,8 @@ def is_error(options: Options, error_code: str) -> bool:
     return options.ignore or not options.select
 
 
-def report(options: Options, filename: str, lineno: str, status: str, msg: str, is_filtered: bool, error_key=None):
+def report(options: Options, filename: str, lineno: str, status: str, msg: str,
+           is_filtered: bool, error_key=None):
     if not options.color:
         if options.show_error_keys and error_key:
             msg = '%s: %s: %s' % (error_key, status, msg)
@@ -139,11 +155,10 @@ def report(options: Options, filename: str, lineno: str, status: str, msg: str, 
     print(outline)
 
 
-def main(paths, mypy_options: Optional[List[str]], options: Options):
-    args = ['mypy', '--show-error-codes']
+def main(mypy_options: Optional[List[str]], options: Options):
+    args = ['mypy']
     if mypy_options:
-        args.append(mypy_options)
-    args.extend(paths)
+        args.extend(mypy_options)
     proc = subprocess.Popen(args, stdout=subprocess.PIPE)
 
     # used to know when to error a note related to an error
@@ -153,13 +168,16 @@ def main(paths, mypy_options: Optional[List[str]], options: Options):
     for line in proc.stdout:
         line = line.decode()
         try:
-            filename, lineno, error_code, status, msg = line.split(':', 4)
+            filename, lineno, status, msg = line.split(':', 3)
         except ValueError:
             text += line
         else:
+            if is_excluded_path(filename, options):
+                continue
+            error_code = get_error_code(msg)
             status = status.strip()
             msg = msg.strip()
-            if status == 'error':
+            if error_code and status == 'error':
                 error = is_error(options, error_code)
                 if error:
                     errors += 1
@@ -180,39 +198,7 @@ def main(paths, mypy_options: Optional[List[str]], options: Options):
 
 # Options Handling
 
-
-def get_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("paths", metavar='PATH', nargs='*')
-    parser.add_argument("--select", "-s",
-                        help="Errors to check (comma separated)")
-    parser.add_argument("--ignore",  "-i",
-                        help="Errors to skip (comma separated)")
-    parser.add_argument("--no-color", dest="color",
-                        default=True,
-                        help="do not colorize output",
-                        action="store_false")
-    parser.add_argument("--show-ignored", "-x",
-                        help="Show errors that have been ignored (darker"
-                             " if using color)",
-                        action="store_true")
-    parser.add_argument("--show-error-keys",
-                        help="Show error key for each line",
-                        action="store_true")
-    parser.add_argument("--list",
-                        help="list error codes",
-                        action="store_true")
-    parser.add_argument("--mypy-options",
-                        help="Options to pass to mypy (Note: to avoid parse "
-                             "errors specify with equal. e.g. "
-                             "--mypy-options=\"--py2\"")
-    parser.add_argument("--select-all",
-                        help="Enable all selections (for debugging missing choices)",
-                        action="store_true")
-    return parser
-
-
-def _parse_multi_options(options, split_token: str = ',') -> List[str]:
+def _parse_multi_options(options: str, split_token: str = ',') -> List[str]:
     r"""Split and strip and discard empties.
 
     Turns the following:
@@ -238,11 +224,13 @@ def _validate(filters: Set[str], error_codes: Set[str]):
 config_types = {
     'select': lambda x: set(_parse_multi_options(x)),
     'ignore': lambda x: set(_parse_multi_options(x)),
+    'exclude': lambda x: [re.compile(fnmatch.translate(x))
+                          for x in _parse_multi_options(x)]
 }
 
 
 class BaseOptionsParser:
-    def extract_updates(self, options):
+    def extract_updates(self, options: Options):
         raise NotImplementedError
 
     def apply(self, options):
@@ -256,7 +244,8 @@ class ConfigFileOptionsParser(BaseOptionsParser):
     def __init__(self, filename=None):
         self.filename = filename
 
-    def _parse_section(self, prefix, template, section):
+    def _parse_section(self, prefix: str, template: Options,
+                       section: configparser.SectionProxy):
         results = {}  # type: Dict[str, object]
         for key in section:
             if key in config_types:
@@ -370,33 +359,35 @@ class ArgparseOptionsParser(BaseOptionsParser):
 
 
 def get_error_codes() -> Set[str]:
-    import mypy.messages
-    return mypy.messages.MessageBuilder.get_message_ids()
+    return FILTERS_SET
 
-    # import inspect
-    #
-    # constant = re.compile("[A-Z][A-Z09_]+$")
-    #
-    # messages = {
-    #     name.lower(): obj.replace('{}', '.*')
-    #     for name, obj in inspect.getmembers(mypy.messages)
-    #     if isinstance(obj, str) and constant.match(name)
-    # }
-    # return messages
-    #
-    # class Errors:
-    #     def report(self, line, column, message, *kwargs):
-    #         print(message)
 
-    # print()
-    #
-    # errors = Errors()
-    # messages = mypy.messages.MessageBuilder(errors, {})
-    # for name, obj in inspect.getmembers(messages):
-    #     if not name.startswith('_') and inspect.ismethod(obj):
-    #         signature = inspect.signature(obj)
-    #         if 'context' in signature.parameters and 'self.fail(' in inspect.getsource(obj):
-    #             print(name)
+def get_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--select", "-s",
+                        help="Errors to check (comma separated)")
+    parser.add_argument("--ignore",  "-i",
+                        help="Errors to skip (comma separated)")
+    parser.add_argument("--no-color", dest="color",
+                        default=True,
+                        help="do not colorize output",
+                        action="store_false")
+    parser.add_argument("--show-ignored", "-x",
+                        help="Show errors that have been ignored (darker"
+                             " if using color)",
+                        action="store_true")
+    parser.add_argument("--show-error-keys",
+                        help="Show error key for each line",
+                        action="store_true")
+    parser.add_argument("--list",
+                        help="list error codes",
+                        action="store_true")
+    parser.add_argument("--select-all",
+                        help="Enable all selections (for debugging missing choices)",
+                        action="store_true")
+    parser.add_argument('flags', metavar='ARG', nargs='*', type=str,
+                        help="Regular mypy flags and files (precede with --)")
+    return parser
 
 
 if __name__ == '__main__':
@@ -437,4 +428,4 @@ if __name__ == '__main__':
     unused = set(error_codes).difference(options.ignore).difference(options.select)
     _validate(unused, error_codes)
 
-    sys.exit(main(args.paths, args.mypy_options, options))
+    sys.exit(main(args.flags, options))
