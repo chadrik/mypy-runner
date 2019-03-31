@@ -155,10 +155,15 @@ def report(options: Options, filename: str, lineno: str, status: str, msg: str,
     print(outline)
 
 
-def main(mypy_options: Optional[List[str]], options: Options):
-    args = ['mypy']
+def run(mypy_options: Optional[List[str]],
+        options: Options, daemon_mode: bool=False) -> int:
+    if daemon_mode:
+        args = ['dmypy', 'run', '--']
+    else:
+        args = ['mypy']
     if mypy_options:
         args.extend(mypy_options)
+
     proc = subprocess.Popen(args, stdout=subprocess.PIPE)
 
     # used to know when to error a note related to an error
@@ -192,8 +197,51 @@ def main(mypy_options: Optional[List[str]], options: Options):
 
     returncode = proc.wait()
     if returncode != 1:
+        # severe error: print everything that wasn't formatted as a standard
+        # error
         sys.stdout.write(text)
     return returncode if errors else 0
+
+
+def main():
+    options = Options()
+    parser = get_parser()
+
+    error_codes = get_error_codes()
+
+    args = parser.parse_args()
+    if args.list:
+        for name in sorted(error_codes):
+            print('  %s' % (name,))
+        sys.exit(0)
+
+    parsers = [
+        ConfigFileOptionsParser(),
+        ArgparseOptionsParser(parser, args)
+    ]
+
+    for p in parsers:
+        p.apply(options)
+
+    if args.select_all:
+        options.select = set(error_codes)
+        options.show_ignored = True
+
+    # if options.select:
+    #     options.select.add('invalid_syntax')
+
+    overlap = options.select.intersection(options.ignore)
+    if overlap:
+        print('The same option must not be both selected and '
+              'ignored: %s' % ', '.join(overlap), file=sys.stderr)
+        sys.exit(PARSING_FAIL)
+
+    _validate(options.select, error_codes)
+    _validate(options.ignore, error_codes)
+    unused = set(error_codes).difference(options.ignore).difference(options.select)
+    _validate(unused, error_codes)
+
+    sys.exit(run(args.flags, options, args.daemon))
 
 
 # Options Handling
@@ -364,6 +412,12 @@ def get_error_codes() -> Set[str]:
 
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--list",
+                        help="list error codes",
+                        action="store_true")
+    parser.add_argument("--daemon", "-d",
+                        help="run in daemon mode (dmypy run)",
+                        action="store_true")
     parser.add_argument("--select", "-s",
                         help="Errors to check (comma separated)")
     parser.add_argument("--ignore",  "-i",
@@ -379,9 +433,6 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("--show-error-keys",
                         help="Show error key for each line",
                         action="store_true")
-    parser.add_argument("--list",
-                        help="list error codes",
-                        action="store_true")
     parser.add_argument("--select-all",
                         help="Enable all selections (for debugging missing choices)",
                         action="store_true")
@@ -391,41 +442,4 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 if __name__ == '__main__':
-    options = Options()
-    parser = get_parser()
-
-    error_codes = get_error_codes()
-
-    args = parser.parse_args()
-    if args.list:
-        for name in sorted(error_codes):
-            print('  %s' % (name,))
-        sys.exit(0)
-
-    parsers = [
-        ConfigFileOptionsParser(),
-        ArgparseOptionsParser(parser, args)
-    ]
-
-    for p in parsers:
-        p.apply(options)
-
-    if args.select_all:
-        options.select = set(error_codes)
-        options.show_ignored = True
-
-    # if options.select:
-    #     options.select.add('invalid_syntax')
-
-    overlap = options.select.intersection(options.ignore)
-    if overlap:
-        print('The same option must not be both selected and '
-              'ignored: %s' % ', '.join(overlap), file=sys.stderr)
-        sys.exit(PARSING_FAIL)
-
-    _validate(options.select, error_codes)
-    _validate(options.ignore, error_codes)
-    unused = set(error_codes).difference(options.ignore).difference(options.select)
-    _validate(unused, error_codes)
-
-    sys.exit(main(args.flags, options))
+    main()
