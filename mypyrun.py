@@ -83,7 +83,8 @@ FILTERS_SET = frozenset(n for n, s in FILTERS)
 
 COLORS = {
     'error': 'red',
-    'note': 'yellow',
+    'warning': 'yellow',
+    'note': None,
 }
 
 GLOBAL_ONLY_OPTIONS = ['color', 'show_ignored', 'show_error_keys']
@@ -98,6 +99,7 @@ class Options:
     """
     select = frozenset()  # type: Set[str]
     ignore = frozenset()  # type: Set[str]
+    warn = frozenset()  # type: Set[str]
     exclude = frozenset()  # type: Set[re.Pattern]
     color = True
     show_ignored = False
@@ -117,16 +119,23 @@ def is_excluded_path(path, options):
     return False
 
 
-def is_error(options: Options, error_code: str) -> bool:
+def get_status(options: Options, error_code: str) -> Optional[str]:
     if options.select:
         if error_code in options.select:
-            return True
+            return 'error'
+
+    if options.warn:
+        if error_code in options.warn:
+            return 'warning'
 
     if options.ignore:
         if error_code in options.ignore:
-            return False
+            return None
 
-    return options.ignore or not options.select
+    if options.ignore or not options.select:
+        return 'error'
+
+    return None
 
 
 def report(options: Options, filename: str, lineno: str, status: str, msg: str,
@@ -183,12 +192,13 @@ def run(mypy_options: Optional[List[str]],
             status = status.strip()
             msg = msg.strip()
             if error_code and status == 'error':
-                error = is_error(options, error_code)
-                if error:
+                new_status = get_status(options, error_code)
+                if new_status == 'error':
                     errors += 1
-                if options.show_ignored or error:
-                    report(options, filename, lineno, status, msg, not error, error_code)
-                    matched_error = error, error_code
+                if options.show_ignored or new_status:
+                    report(options, filename, lineno, new_status,
+                           msg, not new_status, error_code)
+                    matched_error = new_status, error_code
                 else:
                     matched_error = None
             elif status == 'note' and matched_error is not None:
@@ -238,6 +248,8 @@ def main():
 
     _validate(options.select, error_codes)
     _validate(options.ignore, error_codes)
+    _validate(options.warn, error_codes)
+
     unused = set(error_codes).difference(options.ignore).difference(options.select)
     _validate(unused, error_codes)
 
@@ -272,6 +284,7 @@ def _validate(filters: Set[str], error_codes: Set[str]):
 config_types = {
     'select': lambda x: set(_parse_multi_options(x)),
     'ignore': lambda x: set(_parse_multi_options(x)),
+    'warn': lambda x: set(_parse_multi_options(x)),
     'exclude': lambda x: [re.compile(fnmatch.translate(x))
                           for x in _parse_multi_options(x)]
 }
