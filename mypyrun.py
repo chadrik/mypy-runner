@@ -184,32 +184,38 @@ def run(mypy_options: Optional[List[str]],
         try:
             filename, lineno, status, msg = line.split(':', 3)
         except ValueError:
-            text += line
-        else:
-            if is_excluded_path(filename, options):
+            lineno = ''
+            try:
+                filename, status, msg = line.split(':', 2)
+            except ValueError:
+                print(line, end='')
                 continue
-            error_code = get_error_code(msg)
-            status = status.strip()
-            msg = msg.strip()
-            if error_code and status == 'error':
-                new_status = get_status(options, error_code)
-                if new_status == 'error':
-                    errors += 1
-                if options.show_ignored or new_status:
-                    report(options, filename, lineno, new_status,
-                           msg, not new_status, error_code)
-                    matched_error = new_status, error_code
-                else:
-                    matched_error = None
-            elif status == 'note' and matched_error is not None:
-                report(options, filename, lineno, status, msg,
-                       not matched_error[0], matched_error[1])
+
+        if is_excluded_path(filename, options):
+            continue
+
+        error_code = get_error_code(msg)
+        status = status.strip()
+        msg = msg.strip()
+        if error_code and status == 'error':
+            new_status = get_status(options, error_code)
+            if new_status == 'error':
+                errors += 1
+            if options.show_ignored or new_status:
+                report(options, filename, lineno, new_status,
+                       msg, not new_status, error_code)
+                matched_error = new_status, error_code
+            else:
+                matched_error = None
+        elif status == 'note' and matched_error is not None:
+            report(options, filename, lineno, status, msg,
+                   not matched_error[0], matched_error[1])
 
     returncode = proc.wait()
-    if returncode != 1:
-        # severe error: print everything that wasn't formatted as a standard
-        # error
-        sys.stdout.write(text)
+    # if returncode != 1:
+    #     # severe error: print everything that wasn't formatted as a standard
+    #     # error
+    #     sys.stdout.write(text)
     return returncode if errors else 0
 
 
@@ -346,7 +352,6 @@ class ConfigFileOptionsParser(BaseOptionsParser):
         parser = configparser.RawConfigParser()
 
         for config_file in config_files:
-            print(config_file)
             if not os.path.exists(config_file):
                 continue
             try:
