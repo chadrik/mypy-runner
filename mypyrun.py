@@ -7,13 +7,14 @@ import sys
 import re
 import fnmatch
 
-try:
+if sys.version_info[0] == 3:
     import configparser
-except ImportError:
+else:
     import ConfigParser as configparser
-from termcolor import colored
+from termcolor import colored, cprint
 
-from typing import *
+if False:
+    from typing import *
 
 # adapted from mypy:
 CONFIG_FILE = 'mypyrun.ini'
@@ -28,6 +29,8 @@ _FILTERS = [
     # DEFINITION ERRORS --
     # Type annotation errors:
     ('invalid_syntax', 'syntax error in type comment'),
+    ('wrong_number_of_args', 'Type signature has '),
+    ('misplaced_annotation', 'misplaced type annotation'),
     ('not_defined', ' is not defined'),  # in seminal
     ('invalid_type_arguments', '(".*" expects .* type argument)'  # in typeanal
                                '(Optional.* must have exactly one type argument)'
@@ -97,19 +100,33 @@ class Options:
     Options like paths and mypy-options, which can be set via mypy are
     not recorded here.
     """
-    select = frozenset()  # type: Set[str]
-    ignore = frozenset()  # type: Set[str]
-    warn = frozenset()  # type: Set[str]
-    exclude = frozenset()  # type: Set[re.Pattern]
+    select = frozenset()  # type: FrozenSet[str]
+    ignore = frozenset()  # type: FrozenSet[str]
+    warn = frozenset()  # type: FrozenSet[str]
+    exclude = frozenset()  # type: FrozenSet[Pattern]
+    paths = None  # type: List[str]
     color = True
     show_ignored = False
     show_error_keys = False
 
 
-def get_error_code(msg: str) -> Optional[str]:
+def get_error_code(msg):
+    # type: (str) -> Optional[str]
+    """
+    Lookup the error constant from a parsed message literal.
+
+    Parameters
+    ----------
+    msg : str
+
+    Returns
+    -------
+    Optional[str]
+    """
     for code, regex in FILTERS:
         if regex.search(msg):
             return code
+    return None
 
 
 def is_excluded_path(path, options):
@@ -119,7 +136,20 @@ def is_excluded_path(path, options):
     return False
 
 
-def get_status(options: Options, error_code: str) -> Optional[str]:
+def get_status(options, error_code):
+    # type: (Options, str) -> Optional[str]
+    """
+    Determine whether an error code is an error, warning, or ignored
+
+    Parameters
+    ----------
+    options: Options
+    error_code: str
+
+    Returns
+    -------
+    Optional[str]
+    """
     if options.select:
         if error_code in options.select:
             return 'error'
@@ -138,8 +168,22 @@ def get_status(options: Options, error_code: str) -> Optional[str]:
     return None
 
 
-def report(options: Options, filename: str, lineno: str, status: str, msg: str,
-           is_filtered: bool, error_key=None):
+def report(options, filename, lineno, status, msg,
+           is_filtered, error_key=None):
+    # type: (Any, str, str, str, str, bool, Optional[str]) -> None
+    """
+    Report an error to stdout.
+
+    Parameters
+    ----------
+    options : Options
+    filename : str
+    lineno : str
+    status : str
+    msg : str
+    is_filtered : bool
+    error_key : Optional[str]
+    """
     if not options.color:
         if options.show_error_keys and error_key:
             msg = '%s: %s: %s' % (error_key, status, msg)
@@ -157,28 +201,54 @@ def report(options: Options, filename: str, lineno: str, status: str, msg: str,
         color = COLORS[status]
         status = colored(status + ': ', color, attrs=display_attrs)
         if options.show_error_keys and error_key:
-            status = colored(error_key + ': ', 'magenta', attrs=display_attrs) + status
+            status = colored(error_key + ': ', 'magenta',
+                             attrs=display_attrs) + status
         msg = colored(msg, color, attrs=display_attrs)
         outline = filename + lineno + status + msg
 
     print(outline)
 
 
-def run(mypy_options: Optional[List[str]],
-        options: Options, daemon_mode: bool=False) -> int:
+def run(mypy_options, options, daemon_mode=False):
+    # type: (Optional[List[str]], Options, bool) -> int
+    """
+    Parameters
+    ----------
+    mypy_options : Optional[List[str]]
+    options : Options
+    daemon_mode : bool
+        run `dmypy` instead of `mypy`
+
+    Returns
+    -------
+    int
+        exit status
+    """
     if daemon_mode:
         args = ['dmypy', 'run', '--']
     else:
         args = ['mypy']
+
     if mypy_options:
         args.extend(mypy_options)
 
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+    if options.paths:
+        env = os.environ.copy()
+        mypy_path = env.get('MYPY_PATH')
+        if mypy_path:
+            mypy_path = os.pathsep.join([mypy_path] + options.paths)
+        else:
+            mypy_path = os.pathsep.join(options.paths)
+        env['MYPY_PATH'] = mypy_path
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE, env=env)
+    else:
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE)
 
     # used to know when to error a note related to an error
     matched_error = None
     errors = 0
-    text = ''
+    last_error = None  # type: Optional[Tuple[Options, Any, Any, Any, Optional[str]]]
+
     for line in proc.stdout:
         line = line.decode()
         try:
@@ -197,12 +267,15 @@ def run(mypy_options: Optional[List[str]],
         error_code = get_error_code(msg)
         status = status.strip()
         msg = msg.strip()
+
+        last_error = options, filename, lineno, msg, error_code
+
         if error_code and status == 'error':
             new_status = get_status(options, error_code)
             if new_status == 'error':
                 errors += 1
             if options.show_ignored or new_status:
-                report(options, filename, lineno, new_status,
+                report(options, filename, lineno, new_status or 'error',
                        msg, not new_status, error_code)
                 matched_error = new_status, error_code
             else:
@@ -212,10 +285,14 @@ def run(mypy_options: Optional[List[str]],
                    not matched_error[0], matched_error[1])
 
     returncode = proc.wait()
-    # if returncode != 1:
-    #     # severe error: print everything that wasn't formatted as a standard
-    #     # error
-    #     sys.stdout.write(text)
+    if returncode != 1:
+        # severe error: print everything that wasn't formatted as a standard
+        # error
+        cprint("Warning: A severe error occurred", "red")
+        if last_error:
+            options, filename, lineno, msg, error_code = last_error
+            report(options, filename, lineno, 'error', msg, False)
+
     return returncode if errors else 0
 
 
@@ -256,7 +333,8 @@ def main():
     _validate(options.ignore, error_codes)
     _validate(options.warn, error_codes)
 
-    unused = set(error_codes).difference(options.ignore).difference(options.select)
+    unused = set(error_codes).difference(options.ignore)
+    unused = unused.difference(options.select)
     _validate(unused, error_codes)
 
     sys.exit(run(args.flags, options, args.daemon))
@@ -264,15 +342,24 @@ def main():
 
 # Options Handling
 
-def _parse_multi_options(options: str, split_token: str = ',') -> List[str]:
-    r"""Split and strip and discard empties.
+def _parse_multi_options(options, split_token=','):
+    # type: (str, str) -> List[str]
+    r"""
+    Split and strip and discard empties.
 
     Turns the following:
 
-    A,
-    B,
+    >>> _parse_multi_options("    A,\n    B,\n")
+    ["A", "B"]
 
-    into ["A", "B"]
+    Parameters
+    ----------
+    options : str
+    split_token : str
+
+    Returns
+    -------
+    List[str]
     """
     if options:
         return [o.strip() for o in options.split(split_token) if o.strip()]
@@ -280,7 +367,14 @@ def _parse_multi_options(options: str, split_token: str = ',') -> List[str]:
         return []
 
 
-def _validate(filters: Set[str], error_codes: Set[str]):
+def _validate(filters, error_codes):
+    # type: (Set[str], Set[str]) -> None
+    """
+    Parameters
+    ----------
+    filters : Set[str]
+    error_codes : Set[str]
+    """
     invalid = sorted(filters.difference(error_codes))
     if invalid:
         print('Invalid filter(s): %s\n' % ', '.join(invalid), file=sys.stderr)
@@ -291,13 +385,15 @@ config_types = {
     'select': lambda x: set(_parse_multi_options(x)),
     'ignore': lambda x: set(_parse_multi_options(x)),
     'warn': lambda x: set(_parse_multi_options(x)),
+    'paths': lambda x: list(_parse_multi_options(x)),
     'exclude': lambda x: [re.compile(fnmatch.translate(x))
                           for x in _parse_multi_options(x)]
 }
 
 
 class BaseOptionsParser:
-    def extract_updates(self, options: Options):
+    def extract_updates(self, options):
+        # type: (Options) -> Iterator[Tuple[Dict[str, object], Optional[str]]]
         raise NotImplementedError
 
     def apply(self, options):
@@ -311,8 +407,19 @@ class ConfigFileOptionsParser(BaseOptionsParser):
     def __init__(self, filename=None):
         self.filename = filename
 
-    def _parse_section(self, prefix: str, template: Options,
-                       section: configparser.SectionProxy):
+    def _parse_section(self, prefix, template, section):
+        # type: (str, Options, configparser.SectionProxy) -> Dict[str, object]
+        """
+        Parameters
+        ----------
+        prefix : str
+        template : Options
+        section : configparser.SectionProxy
+
+        Returns
+        -------
+        Dict[str, object]
+        """
         results = {}  # type: Dict[str, object]
         for key in section:
             if key in config_types:
@@ -344,6 +451,7 @@ class ConfigFileOptionsParser(BaseOptionsParser):
         return results
 
     def extract_updates(self, options):
+        # type: (Options) -> Iterator[Tuple[Dict[str, object], Optional[str]]]
         if self.filename is not None:
             config_files = (self.filename,)  # type: Tuple[str, ...]
         else:
@@ -397,8 +505,9 @@ class ArgparseOptionsParser(BaseOptionsParser):
         self.parsed = parsed
 
     def _get_specified(self):
+        # type: () -> Dict[str, object]
         parsed_kwargs = dict(self.parsed._get_kwargs())
-        specified = {}
+        specified = {}  # type: Dict[str, object]
         for action in self.parser._get_optional_actions():
             if action.dest in parsed_kwargs:
                 if parsed_kwargs[action.dest] != action.default:
@@ -406,7 +515,7 @@ class ArgparseOptionsParser(BaseOptionsParser):
         return specified
 
     def extract_updates(self, options):
-
+        # type: (Options) -> Iterator[Tuple[Dict[str, object], Optional[str]]]
         results = {}  # type: Dict[str, object]
         for key, v in self._get_specified().items():
             if key in config_types:
@@ -424,7 +533,13 @@ class ArgparseOptionsParser(BaseOptionsParser):
         yield results, None
 
 
-def get_error_codes() -> Set[str]:
+def get_error_codes():
+    # type: () -> FrozenSet[str]
+    """
+    Returns
+    -------
+    FrozenSet[str]
+    """
     return FILTERS_SET
 
 
