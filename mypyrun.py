@@ -26,6 +26,7 @@ CONFIG_FILES = (CONFIG_FILE,) + SHARED_CONFIG_FILES + USER_CONFIG_FILES
 PARSING_FAIL = 100
 
 _FILTERS = [
+    ('revealed_type', 'Revealed type is'),
     # DEFINITION ERRORS --
     # Type annotation errors:
     ('invalid_syntax', 'syntax error in type comment'),
@@ -108,6 +109,7 @@ class Options:
     color = True
     show_ignored = False
     show_error_keys = False
+    daemon = False
 
 
 def get_error_code(msg):
@@ -150,17 +152,14 @@ def get_status(options, error_code):
     -------
     Optional[str]
     """
-    if options.select:
-        if error_code in options.select:
-            return 'error'
+    if options.select and error_code in options.select:
+        return 'error'
 
-    if options.warn:
-        if error_code in options.warn:
-            return 'warning'
+    if options.warn and error_code in options.warn:
+        return 'warning'
 
-    if options.ignore:
-        if error_code in options.ignore:
-            return None
+    if options.ignore and error_code in options.ignore:
+        return None
 
     if options.ignore or not options.select:
         return 'error'
@@ -285,15 +284,16 @@ def run(mypy_options, options, daemon_mode=False):
                    not matched_error[0], matched_error[1])
 
     returncode = proc.wait()
-    if returncode != 1:
+    if returncode > 1:
         # severe error: print everything that wasn't formatted as a standard
         # error
         cprint("Warning: A severe error occurred", "red")
         if last_error:
             options, filename, lineno, msg, error_code = last_error
             report(options, filename, lineno, 'error', msg, False)
-
-    return returncode if errors else 0
+        return returncode
+    else:
+        return returncode if errors else 0
 
 
 def main():
@@ -337,7 +337,7 @@ def main():
     unused = unused.difference(options.select)
     _validate(unused, error_codes)
 
-    sys.exit(run(args.flags, options, args.daemon))
+    sys.exit(run(args.flags, options, options.daemon))
 
 
 # Options Handling
