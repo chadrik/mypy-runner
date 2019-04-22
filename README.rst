@@ -1,4 +1,5 @@
-# mypy-runner
+mypy-runner
+-----------
 
 Wraps mypy and adds the following features:
 

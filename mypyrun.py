@@ -169,7 +169,7 @@ def get_status(options, error_code):
 
 def report(options, filename, lineno, status, msg,
            is_filtered, error_key=None):
-    # type: (Any, str, str, str, str, bool, Optional[str]) -> None
+    # type: (Options, str, str, str, str, bool, Optional[str]) -> None
     """
     Report an error to stdout.
 
@@ -231,17 +231,20 @@ def run(mypy_options, options, daemon_mode=False):
     if mypy_options:
         args.extend(mypy_options)
 
+    env = os.environ.copy()
+
     if options.paths:
-        env = os.environ.copy()
-        mypy_path = env.get('MYPY_PATH')
-        if mypy_path:
-            mypy_path = os.pathsep.join([mypy_path] + options.paths)
+        if daemon_mode:
+            args.extend(options.paths)
         else:
-            mypy_path = os.pathsep.join(options.paths)
-        env['MYPY_PATH'] = mypy_path
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE, env=env)
-    else:
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+            mypy_path = env.get('MYPY_PATH')
+            if mypy_path:
+                mypy_path = os.pathsep.join([mypy_path] + options.paths)
+            else:
+                mypy_path = os.pathsep.join(options.paths)
+            env['MYPY_PATH'] = mypy_path
+
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, env=env)
 
     # used to know when to error a note related to an error
     matched_error = None
