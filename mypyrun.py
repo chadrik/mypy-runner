@@ -22,6 +22,8 @@ SHARED_CONFIG_FILES = ('mypy.ini', 'setup.cfg')
 USER_CONFIG_FILES = ('~/.mypy.ini',)
 CONFIG_FILES = (CONFIG_FILE,) + SHARED_CONFIG_FILES + USER_CONFIG_FILES
 
+ALL = None
+
 # choose an exit that does not conflict with mypy's
 PARSING_FAIL = 100
 
@@ -91,7 +93,13 @@ COLORS = {
     'note': None,
 }
 
-GLOBAL_ONLY_OPTIONS = ['color', 'show_ignored', 'show_error_keys']
+GLOBAL_ONLY_OPTIONS = [
+    'color',
+    'show_ignored',
+    'show_error_keys',
+    'daemon',
+    'exclude',
+]
 
 
 class Options:
@@ -101,15 +109,33 @@ class Options:
     Options like paths and mypy-options, which can be set via mypy are
     not recorded here.
     """
-    select = frozenset()  # type: FrozenSet[str]
-    ignore = frozenset()  # type: FrozenSet[str]
-    warn = frozenset()  # type: FrozenSet[str]
-    exclude = frozenset()  # type: FrozenSet[Pattern]
+    PER_MODULE_OPTIONS = [
+        'select',
+        'ignore',
+        'warn',
+        'include',
+    ]
+
+    select = None  # type: Optional[Set[str]]
+    ignore = None  # type: Optional[Set[str]]
+    warn = None  # type: Optional[Set[str]]
+    include = None  # type: List[Pattern]
+    exclude = None  # type: List[Pattern]
+
+    # global-only options:
     paths = None  # type: List[str]
     color = True
     show_ignored = False
     show_error_keys = False
     daemon = False
+
+    def __init__(self):
+        self.select = ALL
+        self.ignore = set()
+        self.warn = set()
+        self.include = []
+        self.exclude = []
+        self.paths = []
 
 
 def get_error_code(msg):
@@ -138,6 +164,15 @@ def is_excluded_path(path, options):
     return False
 
 
+def get_options(filename, global_options, module_options):
+    # type: (str, Options, List[Tuple[str, Options]]) -> Options
+    for key, options in module_options:
+        for include in options.include:
+            if include.search(filename):
+                return options
+    return global_options
+
+
 def get_status(options, error_code):
     # type: (Options, str) -> Optional[str]
     """
@@ -152,16 +187,16 @@ def get_status(options, error_code):
     -------
     Optional[str]
     """
-    if options.select and error_code in options.select:
+    if options.select is ALL or error_code in options.select:
         return 'error'
 
-    if options.warn and error_code in options.warn:
-        return 'warning'
-
-    if options.ignore and error_code in options.ignore:
+    if options.ignore is ALL or error_code in options.ignore:
         return None
 
-    if options.ignore or not options.select:
+    if options.warn is ALL or error_code in options.warn:
+        return 'warning'
+
+    if options.ignore or (options.select is not ALL and not options.select):
         return 'error'
 
     return None
@@ -208,13 +243,14 @@ def report(options, filename, lineno, status, msg,
     print(outline)
 
 
-def run(mypy_options, options, daemon_mode=False):
-    # type: (Optional[List[str]], Options, bool) -> int
+def run(active_files, global_options, module_options,  daemon_mode=False):
+    # type: (Optional[List[str]], Options, List[Tuple[str, Options]], bool) -> int
     """
     Parameters
     ----------
     mypy_options : Optional[List[str]]
-    options : Options
+    global_options : Options
+    module_options : List[Tuple[str, Options]]
     daemon_mode : bool
         run `dmypy` instead of `mypy`
 
@@ -228,20 +264,24 @@ def run(mypy_options, options, daemon_mode=False):
     else:
         args = ['mypy']
 
-    if mypy_options:
-        args.extend(mypy_options)
+    # if mypy_options:
+    #     args.extend(mypy_options)
+
+    active_options = dict(module_options).get('active')
+    if active_files:
+        active_options.include = [_glob_to_regex(x) for x in active_files]
 
     env = os.environ.copy()
 
-    if options.paths:
+    if global_options.paths:
         if daemon_mode:
-            args.extend(options.paths)
+            args.extend(global_options.paths)
         else:
             mypy_path = env.get('MYPY_PATH')
             if mypy_path:
-                mypy_path = os.pathsep.join([mypy_path] + options.paths)
+                mypy_path = os.pathsep.join([mypy_path] + global_options.paths)
             else:
-                mypy_path = os.pathsep.join(options.paths)
+                mypy_path = os.pathsep.join(global_options.paths)
             env['MYPY_PATH'] = mypy_path
 
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, env=env)
@@ -263,27 +303,29 @@ def run(mypy_options, options, daemon_mode=False):
                 print(line, end='')
                 continue
 
-        if is_excluded_path(filename, options):
+        if is_excluded_path(filename, global_options):
             continue
+
+        options = get_options(filename, global_options, module_options)
 
         error_code = get_error_code(msg)
         status = status.strip()
         msg = msg.strip()
 
-        last_error = options, filename, lineno, msg, error_code
+        last_error = global_options, filename, lineno, msg, error_code
 
         if error_code and status == 'error':
             new_status = get_status(options, error_code)
             if new_status == 'error':
                 errors += 1
-            if options.show_ignored or new_status:
-                report(options, filename, lineno, new_status or 'error',
+            if global_options.show_ignored or new_status:
+                report(global_options, filename, lineno, new_status or 'error',
                        msg, not new_status, error_code)
                 matched_error = new_status, error_code
             else:
                 matched_error = None
         elif status == 'note' and matched_error is not None:
-            report(options, filename, lineno, status, msg,
+            report(global_options, filename, lineno, status, msg,
                    not matched_error[0], matched_error[1])
 
     returncode = proc.wait()
@@ -292,8 +334,8 @@ def run(mypy_options, options, daemon_mode=False):
         # error
         cprint("Warning: A severe error occurred", "red")
         if last_error:
-            options, filename, lineno, msg, error_code = last_error
-            report(options, filename, lineno, 'error', msg, False)
+            global_options, filename, lineno, msg, error_code = last_error
+            report(global_options, filename, lineno, 'error', msg, False)
         return returncode
     else:
         return returncode if errors else 0
@@ -301,6 +343,8 @@ def run(mypy_options, options, daemon_mode=False):
 
 def main():
     options = Options()
+    module_options = []
+
     parser = get_parser()
 
     error_codes = get_error_codes()
@@ -317,30 +361,36 @@ def main():
     ]
 
     for p in parsers:
-        p.apply(options)
+        p.apply(options, module_options)
 
-    if args.select_all:
-        options.select = set(error_codes)
-        options.show_ignored = True
+    if args.options:
+        override_options = dict(module_options).get(args.options)
+        if override_options is None:
+            print('Configuration section does not exist: [mypyrun-%s]' %
+                  args.options)
+            sys.exit(PARSING_FAIL)
+        for key in Options.PER_MODULE_OPTIONS:
+            setattr(options, key, getattr(override_options, key))
 
     # if options.select:
     #     options.select.add('invalid_syntax')
 
-    overlap = options.select.intersection(options.ignore)
-    if overlap:
-        print('The same option must not be both selected and '
-              'ignored: %s' % ', '.join(overlap), file=sys.stderr)
-        sys.exit(PARSING_FAIL)
+    if options.select:
+        overlap = options.select.intersection(options.ignore)
+        if overlap:
+            print('The same option must not be both selected and '
+                  'ignored: %s' % ', '.join(overlap), file=sys.stderr)
+            sys.exit(PARSING_FAIL)
 
-    _validate(options.select, error_codes)
-    _validate(options.ignore, error_codes)
-    _validate(options.warn, error_codes)
+    # _validate(options.select, error_codes)
+    # _validate(options.ignore, error_codes)
+    # _validate(options.warn, error_codes)
+    #
+    # unused = set(error_codes).difference(options.ignore)
+    # unused = unused.difference(options.select)
+    # _validate(unused, error_codes)
 
-    unused = set(error_codes).difference(options.ignore)
-    unused = unused.difference(options.select)
-    _validate(unused, error_codes)
-
-    sys.exit(run(args.flags, options, options.daemon))
+    sys.exit(run(args.files, options, module_options, options.daemon))
 
 
 # Options Handling
@@ -384,13 +434,30 @@ def _validate(filters, error_codes):
         sys.exit(PARSING_FAIL)
 
 
+def _glob_to_regex(s):
+    return re.compile(fnmatch.translate(s))
+
+
+def _glob_list(s):
+    # type: (str) -> List[Pattern]
+    return [_glob_to_regex(x) for x in _parse_multi_options(s)]
+
+
+def _error_set(s):
+    # type: (str) -> Optional[Set[str]]
+    result = set(_parse_multi_options(s))
+    if '*' in result:
+        return None
+    return result
+
+
 config_types = {
-    'select': lambda x: set(_parse_multi_options(x)),
-    'ignore': lambda x: set(_parse_multi_options(x)),
-    'warn': lambda x: set(_parse_multi_options(x)),
-    'paths': lambda x: list(_parse_multi_options(x)),
-    'exclude': lambda x: [re.compile(fnmatch.translate(x))
-                          for x in _parse_multi_options(x)]
+    'select': _error_set,
+    'ignore': _error_set,
+    'warn': _error_set,
+    'paths':  _parse_multi_options,
+    'include': _glob_list,
+    'exclude': _glob_list,
 }
 
 
@@ -399,11 +466,17 @@ class BaseOptionsParser:
         # type: (Options) -> Iterator[Tuple[Dict[str, object], Optional[str]]]
         raise NotImplementedError
 
-    def apply(self, options):
-        for updates, fpath in self.extract_updates(options):
+    def apply(self, options, module_options):
+        # type: (Options, List[Tuple[str, Options]]) -> None
+        for updates, key in self.extract_updates(options):
             if updates:
+                if key is None:
+                    opt = options
+                else:
+                    opt = Options()
+                    module_options.append((key, opt))
                 for k, v in updates.items():
-                    setattr(options, k, v)
+                    setattr(opt, k, v)
 
 
 class ConfigFileOptionsParser(BaseOptionsParser):
@@ -497,7 +570,7 @@ class ConfigFileOptionsParser(BaseOptionsParser):
                           (prefix, ', '.join(sorted(set(updates).intersection(GLOBAL_ONLY_OPTIONS)))),
                           file=sys.stderr)
                     updates = {k: v for k, v in updates.items() if k in Options.PER_MODULE_OPTIONS}
-                globs = name[5:]
+                globs = name[8:]
                 for glob in globs.split(','):
                     yield updates, glob
 
@@ -569,11 +642,14 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("--show-error-keys",
                         help="Show error key for each line",
                         action="store_true")
-    parser.add_argument("--select-all",
-                        help="Enable all selections (for debugging missing choices)",
-                        action="store_true")
-    parser.add_argument('flags', metavar='ARG', nargs='*', type=str,
-                        help="Regular mypy flags and files (precede with --)")
+    parser.add_argument("--options",  "-o",
+                        help="Override the default options to use the named"
+                             "configuration section (e.g. pass "
+                             "--options=foo to use the [mypyrun-foo] "
+                             "section)")
+    parser.add_argument('files', nargs='*', type=str,
+                        help="Files to isolate (triggers use of 'active'"
+                             "options for these files)")
     return parser
 
 
