@@ -274,15 +274,7 @@ def run(active_files, global_options, module_options,  daemon_mode=False):
     env = os.environ.copy()
 
     if global_options.paths:
-        if daemon_mode:
-            args.extend(global_options.paths)
-        else:
-            mypy_path = env.get('MYPY_PATH')
-            if mypy_path:
-                mypy_path = os.pathsep.join([mypy_path] + global_options.paths)
-            else:
-                mypy_path = os.pathsep.join(global_options.paths)
-            env['MYPY_PATH'] = mypy_path
+        args.extend(global_options.paths)
 
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, env=env)
 
