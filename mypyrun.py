@@ -268,7 +268,7 @@ def run(active_files, global_options, module_options,  daemon_mode=False):
     #     args.extend(mypy_options)
 
     active_options = dict(module_options).get('active')
-    if active_files:
+    if active_options and active_files:
         active_options.include = [_glob_to_regex(x) for x in active_files]
 
     env = os.environ.copy()
