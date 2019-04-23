@@ -6,6 +6,7 @@ import os
 import sys
 import re
 import fnmatch
+import json
 
 if sys.version_info[0] == 3:
     import configparser
@@ -349,6 +350,7 @@ def main():
 
     parsers = [
         ConfigFileOptionsParser(),
+        JsonEnvVarOptionsParser(),
         ArgparseOptionsParser(parser, args)
     ]
 
@@ -569,6 +571,7 @@ class ConfigFileOptionsParser(BaseOptionsParser):
 
 class ArgparseOptionsParser(BaseOptionsParser):
     def __init__(self, parser, parsed):
+        # type: (argparse.ArgumentParser, Any) -> None
         self.parser = parser
         self.parsed = parsed
 
@@ -588,17 +591,44 @@ class ArgparseOptionsParser(BaseOptionsParser):
         for key, v in self._get_specified().items():
             if key in config_types:
                 ct = config_types[key]
-                try:
-                    v = ct(v)
-                except argparse.ArgumentTypeError as err:
-                    print("%s: %s" % (key, err), file=sys.stderr)
-                    continue
+                v = ct(v)
             else:
                 dv = getattr(options, key, None)
                 if dv is None:
                     continue
             results[key] = v
         yield results, None
+
+
+class JsonOptionsParser(BaseOptionsParser):
+
+    def __init__(self, json_data):
+        self.json_data = json_data
+
+    def extract_updates(self, options):
+        # type: (Options) -> Iterator[Tuple[Dict[str, object], Optional[str]]]
+
+        if self.json_data:
+            results = {}  # type: Dict[str, object]
+            for key, v in self.json_data.items():
+                if key in config_types:
+                    ct = config_types[key]
+                    v = ct(v)
+                else:
+                    dv = getattr(options, key, None)
+                    if dv is None:
+                        print("%s: Unrecognized option: %s = %s" % (key, v),
+                              file=sys.stderr)
+                        continue
+                results[key] = v
+            yield results, None
+
+
+class JsonEnvVarOptionsParser(JsonOptionsParser):
+    def __init__(self):
+        opts = os.environ.get('MYPYRUN_OPTIONS')
+        json_data = json.loads(opts) if opts else None
+        super(JsonEnvVarOptionsParser, self).__init__(json_data)
 
 
 def get_error_codes():
