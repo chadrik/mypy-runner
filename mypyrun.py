@@ -675,7 +675,7 @@ class JsonOptionsParser(BaseOptionsParser):
                 else:
                     dv = getattr(options, key, None)
                     if dv is None:
-                        print("%s: Unrecognized option: %s = %s" % (key, v),
+                        print("Unrecognized option: %s = %s" % (key, v),
                               file=sys.stderr)
                         continue
                 results[key] = v
@@ -699,7 +699,8 @@ def get_error_codes():
     return FILTERS_SET
 
 
-def get_parser() -> argparse.ArgumentParser:
+def get_parser():
+    # type: () -> argparse.ArgumentParser
     parser = argparse.ArgumentParser()
     parser.add_argument("--list",
                         help="list error codes",
