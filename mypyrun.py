@@ -7,6 +7,7 @@ import sys
 import re
 import fnmatch
 import json
+from collections import defaultdict
 
 if sys.version_info[0] == 3:
     import configparser
@@ -281,7 +282,8 @@ def run(active_files, global_options, module_options,  daemon_mode=False):
 
     # used to know when to error a note related to an error
     matched_error = None
-    errors = 0
+    errors = defaultdict(int)  # type: DefaultDict[str]
+    warnings = defaultdict(int)  # type: DefaultDict[str]
     last_error = None  # type: Optional[Tuple[Options, Any, Any, Any, Optional[str]]]
 
     for line in proc.stdout:
@@ -310,7 +312,9 @@ def run(active_files, global_options, module_options,  daemon_mode=False):
         if error_code and status == 'error':
             new_status = get_status(options, error_code)
             if new_status == 'error':
-                errors += 1
+                errors[filename] += 1
+            elif new_status == 'warning':
+                warnings[filename] += 1
             if global_options.show_ignored or new_status:
                 report(global_options, filename, lineno, new_status or 'error',
                        msg, not new_status, error_code)
@@ -320,6 +324,20 @@ def run(active_files, global_options, module_options,  daemon_mode=False):
         elif status == 'note' and matched_error is not None:
             report(global_options, filename, lineno, status, msg,
                    not matched_error[0], matched_error[1])
+
+    def print_stat(key, value):
+        print("{:.<12}{:.>20}".format(key, value))
+
+    print()
+    print_stat("Errors", sum(errors.values()))
+    print_stat("Warnings", sum(warnings.values()))
+    if active_files:
+        error_files = set(errors.keys())
+        warning_files = set(warnings.keys())
+        clean_files = set(active_files).difference(error_files | warning_files)
+        print_stat("Clean files", len(clean_files))
+        # for x in sorted(clean_files):
+        #     print(x)
 
     returncode = proc.wait()
     if returncode > 1:
