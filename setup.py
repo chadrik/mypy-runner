@@ -10,8 +10,8 @@ def read(*parts):
 
 
 setup(
-    name="mypyrun",
-    version="0.1.0",
+    name="mypy-runner",
+    version="0.1.1",
     author="Chad Dombrova",
     description="Run mypy with options to filter errors and colorize output",
     long_description=read("README.rst"),
@@ -24,7 +24,6 @@ setup(
     },
     install_requires=[
         "termcolor",
-        "mypy",
     ],
     extras_require={
         "tests": [

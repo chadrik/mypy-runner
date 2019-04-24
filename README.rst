@@ -1,4 +1,4 @@
-``mypyrun``
+mypy-runner
 ===========
 
 Features
