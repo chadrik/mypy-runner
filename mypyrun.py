@@ -279,7 +279,7 @@ def report(options, filename, lineno, status, msg,
     print(outline)
 
 
-def run(active_files, global_options, module_options,  daemon_mode=False):
+def run(active_files, global_options, module_options, daemon_mode=False):
     # type: (Optional[List[str]], Options, List[Tuple[str, Options]], bool) -> int
     """
     Parameters
@@ -305,6 +305,9 @@ def run(active_files, global_options, module_options,  daemon_mode=False):
 
     active_options = dict(module_options).get('active')
     if active_options and active_files:
+        # force the `active` options to be found by `get_options()` for all
+        # files passed on the command-line
+        # FIXME: reorder module_options so this is first?
         active_options.include = [_glob_to_regex(x) for x in active_files]
 
     env = os.environ.copy()
