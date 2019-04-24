@@ -13,7 +13,6 @@ if sys.version_info[0] == 3:
     import configparser
 else:
     import ConfigParser as configparser
-from termcolor import colored, cprint
 
 if False:
     from typing import *
@@ -102,6 +101,41 @@ GLOBAL_ONLY_OPTIONS = [
     'daemon',
     'exclude',
 ]
+
+TERM_ATTRIBUTES = {
+    'bold': 1,
+    'dark': 2,
+    'underline': 4,
+    'blink': 5,
+    'reverse': 7,
+    'concealed': 8,
+}
+
+TERM_COLORS = {
+    'grey': 30,
+    'red': 31,
+    'green': 32,
+    'yellow': 33,
+    'blue': 34,
+    'magenta': 35,
+    'cyan': 36,
+    'white': 37,
+}
+
+TERM_RESET = '\033[0m'
+
+
+def colored(text, color=None, attrs=None):
+    esc = '\033[%dm%s'
+    if color is not None:
+        text = esc % (TERM_COLORS[color], text)
+
+    if attrs is not None:
+        for attr in attrs:
+            text = esc % (TERM_ATTRIBUTES[attr], text)
+
+    text += TERM_RESET
+    return text
 
 
 class Options:
@@ -343,7 +377,10 @@ def run(active_files, global_options, module_options,  daemon_mode=False):
     if returncode > 1:
         # severe error: print everything that wasn't formatted as a standard
         # error
-        cprint("Warning: A severe error occurred", "red")
+        msg = "Warning: A severe error occurred"
+        if global_options.color:
+            msg = colored(msg, "red")
+        print(msg)
         if last_error:
             global_options, filename, lineno, msg, error_code = last_error
             report(global_options, filename, lineno, 'error', msg, False)

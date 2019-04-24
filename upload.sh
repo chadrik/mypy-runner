@@ -9,4 +9,6 @@ if [[ -z $1 ]]; then
 else
     echo "doing official release"
     twine upload dist/*
+    git tag "$1"
+    git push --tags
 fi
