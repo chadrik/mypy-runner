@@ -18,7 +18,7 @@ setup(
     license="MIT",
     keywords=["mypy", "typing", "pep484", "annotations"],
     url="https://github.com/chadrik/mypy-runner",
-    packages=find_packages(),
+    py_modules=['mypyrun'],
     entry_points={
         'console_scripts': ['mypyrun=mypyrun:main'],
     },
