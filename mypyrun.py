@@ -344,8 +344,8 @@ def main():
 
     args = parser.parse_args()
     if args.list:
-        for name in sorted(error_codes):
-            print('  %s' % (name,))
+        for name, pattern in sorted(_FILTERS):
+            print('  %s: %r' % (name, pattern))
         sys.exit(0)
 
     parsers = [
@@ -653,6 +653,8 @@ def get_parser() -> argparse.ArgumentParser:
                         help="Errors to check (comma separated)")
     parser.add_argument("--ignore",  "-i",
                         help="Errors to skip (comma separated)")
+    parser.add_argument("--warn",  "-w",
+                        help="Errors to convert into warnings (comma separated)")
     parser.add_argument("--no-color", dest="color",
                         default=True,
                         help="do not colorize output",
