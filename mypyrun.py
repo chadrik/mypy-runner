@@ -303,20 +303,16 @@ def run(active_files, global_options, module_options, daemon_mode=False):
 
     # if mypy_options:
     #     args.extend(mypy_options)
+    if global_options.paths:
+        args.extend(global_options.paths)
 
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE)
     active_options = dict(module_options).get('active')
     if active_options and active_files:
         # force the `active` options to be found by `get_options()` for all
         # files passed on the command-line
         # FIXME: reorder module_options so this is first?
         active_options.include = [_glob_to_regex(x) for x in active_files]
-
-    env = os.environ.copy()
-
-    if global_options.paths:
-        args.extend(global_options.paths)
-
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE, env=env)
 
     # used to know when to error a note related to an error
     matched_error = None
