@@ -9,7 +9,10 @@ import fnmatch
 import json
 from collections import defaultdict
 
-from backports import configparser
+try:
+    import configparser
+except ImportError:
+    from backports import configparser
 
 if False:
     from typing import *
@@ -138,9 +141,6 @@ def colored(text, color=None, attrs=None):
 class Options(object):
     """
     Options common to both the config file and the cli.
-
-    Options like paths and mypy-options, which can be set via mypy are
-    not recorded here.
     """
     PER_MODULE_OPTIONS = [
         'select',
@@ -156,7 +156,7 @@ class Options(object):
     exclude = None  # type: List[Pattern]
 
     # global-only options:
-    paths = None  # type: List[str]
+    args = None  # type: List[str]
     color = True
     show_ignored = False
     show_error_keys = False
@@ -168,7 +168,7 @@ class Options(object):
         self.warn = set()
         self.include = []
         self.exclude = []
-        self.paths = []
+        self.args = []
 
     def is_excluded_path(self, path):
         # type: (str) -> bool
@@ -280,33 +280,30 @@ def report(options, filename, lineno, status, msg,
     print(outline)
 
 
-def run(active_files, global_options, module_options, daemon_mode=False):
-    # type: (Optional[List[str]], Options, List[Tuple[str, Options]], bool) -> int
+def run(active_files, global_options, module_options):
+    # type: (Optional[List[str]], Options, List[Tuple[str, Options]]) -> int
     """
     Parameters
     ----------
-    mypy_options : Optional[List[str]]
+    active_files : Optional[List[str]]
     global_options : Options
     module_options : List[Tuple[str, Options]]
-    daemon_mode : bool
-        run `dmypy` instead of `mypy`
 
     Returns
     -------
     int
         exit status
     """
-    if daemon_mode:
+    if global_options.daemon:
         args = ['dmypy', 'run', '--']
     else:
         args = ['mypy']
 
-    # if mypy_options:
-    #     args.extend(mypy_options)
-    if global_options.paths:
-        args.extend(global_options.paths)
+    if global_options.args:
+        args.extend(global_options.args)
 
     proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+
     active_options = dict(module_options).get('active')
     if active_options and active_files:
         # force the `active` options to be found by `get_options()` for all
@@ -389,16 +386,23 @@ def run(active_files, global_options, module_options, daemon_mode=False):
         return returncode if errors else 0
 
 
-def main():
+def main(argv=None):
+    # type: (Optional[List[str]]) -> None
+
+    if argv is None:
+        argv = sys.argv[1:]
+
     options = Options()
     module_options = []
 
     parser = get_parser()
 
-    error_codes = get_error_codes()
+    dummy = argparse.Namespace()
+    parser.parse_args(argv, dummy)
 
-    args = parser.parse_args()
-    if args.list:
+    # error_codes = get_error_codes()
+
+    if dummy.list:
         for name, pattern in sorted(_FILTERS):
             print('  %s: %r' % (name, pattern))
         sys.exit(0)
@@ -406,17 +410,17 @@ def main():
     parsers = [
         ConfigFileOptionsParser(),
         JsonEnvVarOptionsParser(),
-        ArgparseOptionsParser(parser, args)
+        ArgparseOptionsParser(parser, argv)
     ]
 
     for p in parsers:
         p.apply(options, module_options)
 
-    if args.options:
-        override_options = dict(module_options).get(args.options)
+    if dummy.options:
+        override_options = dict(module_options).get(dummy.options)
         if override_options is None:
             print('Configuration section does not exist: [mypyrun-%s]' %
-                  args.options)
+                  dummy.options)
             sys.exit(PARSING_FAIL)
         for key in Options.PER_MODULE_OPTIONS:
             setattr(options, key, getattr(override_options, key))
@@ -424,7 +428,7 @@ def main():
     # if options.select:
     #     options.select.add('invalid_syntax')
 
-    if options.select:
+    if options.select and options.ignore:
         overlap = options.select.intersection(options.ignore)
         if overlap:
             print('The same option must not be both selected and '
@@ -439,13 +443,13 @@ def main():
     # unused = unused.difference(options.select)
     # _validate(unused, error_codes)
 
-    sys.exit(run(args.files, options, module_options, options.daemon))
+    sys.exit(run(dummy.files, options, module_options))
 
 
 # Options Handling
 
 def _parse_multi_options(options, split_token=','):
-    # type: (str, str) -> List[str]
+    # type: (Union[str, List[str]], str) -> List[str]
     r"""
     Split and strip and discard empties.
 
@@ -504,7 +508,7 @@ config_types = {
     'select': _error_set,
     'ignore': _error_set,
     'warn': _error_set,
-    'paths':  _parse_multi_options,
+    'args':  _parse_multi_options,
     'include': _glob_list,
     'exclude': _glob_list,
 }
@@ -624,35 +628,37 @@ class ConfigFileOptionsParser(BaseOptionsParser):
                     yield updates, glob
 
 
+class SplitNamespace(argparse.Namespace):
+    def __init__(self, standard_namespace, alt_namespace):
+        self.__dict__['_standard_namespace'] = standard_namespace
+        self.__dict__['_alt_namespace'] = alt_namespace
+
+    def _get(self):
+        return (self._standard_namespace, self._alt_namespace)
+
+    def __setattr__(self, name, value):
+        if hasattr(self._standard_namespace, name):
+            setattr(self._standard_namespace, name, value)
+        else:
+            setattr(self._alt_namespace, name, value)
+
+    def __getattr__(self, name):
+        if hasattr(self._standard_namespace, name):
+            return getattr(self._standard_namespace, name)
+        else:
+            return getattr(self._alt_namespace, name)
+
+
 class ArgparseOptionsParser(BaseOptionsParser):
-    def __init__(self, parser, parsed):
-        # type: (argparse.ArgumentParser, Any) -> None
+    def __init__(self, parser, argv=None):
+        # type: (argparse.ArgumentParser, Optional[List[str]]) -> None
         self.parser = parser
-        self.parsed = parsed
+        self.argv = argv
 
-    def _get_specified(self):
-        # type: () -> Dict[str, object]
-        parsed_kwargs = dict(self.parsed._get_kwargs())
-        specified = {}  # type: Dict[str, object]
-        for action in self.parser._get_optional_actions():
-            if action.dest in parsed_kwargs:
-                if parsed_kwargs[action.dest] != action.default:
-                    specified[action.dest] = parsed_kwargs[action.dest]
-        return specified
-
-    def extract_updates(self, options):
-        # type: (Options) -> Iterator[Tuple[Dict[str, object], Optional[str]]]
-        results = {}  # type: Dict[str, object]
-        for key, v in self._get_specified().items():
-            if key in config_types:
-                ct = config_types[key]
-                v = ct(v)
-            else:
-                dv = getattr(options, key, None)
-                if dv is None:
-                    continue
-            results[key] = v
-        yield results, None
+    def apply(self, options, module_options):
+        # type: (Options, List[Tuple[str, Options]]) -> None
+        other_args = argparse.Namespace()
+        self.parser.parse_args(self.argv, SplitNamespace(options, other_args))
 
 
 class JsonOptionsParser(BaseOptionsParser):
@@ -698,23 +704,37 @@ def get_error_codes():
 
 def get_parser():
     # type: () -> argparse.ArgumentParser
+
     parser = argparse.ArgumentParser()
+
+    def add_invertible_flag(flag, default, help, inverse=None):
+        if inverse is None:
+            inverse = '--no-{}'.format(flag[2:])
+
+        help += " (inverse: {})".format(inverse)
+
+        arg = parser.add_argument(
+            flag, action='store_false' if default else 'store_true',
+            help=help)
+
+        dest = arg.dest
+        arg = parser.add_argument(
+            inverse, action='store_true' if default else 'store_false',
+            dest=dest, help=argparse.SUPPRESS)
+
     parser.add_argument("--list",
-                        help="list error codes",
+                        help="List error codes",
                         action="store_true")
-    parser.add_argument("--daemon", "-d",
-                        help="run in daemon mode (dmypy run)",
-                        action="store_true")
-    parser.add_argument("--select", "-s",
-                        help="Errors to check (comma separated)")
-    parser.add_argument("--ignore",  "-i",
-                        help="Errors to skip (comma separated)")
+    add_invertible_flag("--daemon", default=False,
+                        help="Run mypy in daemon mode")
+    parser.add_argument("--select", "-s", nargs="+", type=str,
+                        help="Errors to check")
+    parser.add_argument("--ignore",  "-i", nargs="+", type=str,
+                        help="Errors to skip")
     parser.add_argument("--warn",  "-w",
                         help="Errors to convert into warnings (comma separated)")
-    parser.add_argument("--no-color", dest="color",
-                        default=True,
-                        help="do not colorize output",
-                        action="store_false")
+    add_invertible_flag("--color", default=True,
+                        help="Colorize output")
     parser.add_argument("--show-ignored", "-x",
                         help="Show errors that have been ignored (darker"
                              " if using color)",
@@ -727,9 +747,13 @@ def get_parser():
                              "configuration section (e.g. pass "
                              "--options=foo to use the [mypyrun-foo] "
                              "section)")
-    parser.add_argument('files', nargs='*', type=str,
+    parser.add_argument('--files', nargs="+", type=str,
                         help="Files to isolate (triggers use of 'active'"
                              "options for these files)")
+    parser.add_argument('args', metavar='ARG', nargs='*', type=str,
+                        default=argparse.SUPPRESS,
+                        help="Regular mypy flags and files (precede with --)")
+
     return parser
 
 
