@@ -170,6 +170,47 @@ class Options(object):
         self.exclude = []
         self.paths = []
 
+    def is_excluded_path(self, path):
+        # type: (str) -> bool
+        for regex in self.exclude:
+            if regex.search(path):
+                return True
+        return False
+
+    def is_included_path(self, path):
+        # type: (str) -> bool
+        for regex in self.include:
+            if regex.search(path):
+                return True
+        return False
+
+    def get_status(self, error_code):
+        # type: (str) -> Optional[str]
+        """
+        Determine whether an error code is an error, warning, or ignored
+
+        Parameters
+        ----------
+        error_code: str
+
+        Returns
+        -------
+        Optional[str]
+        """
+        if self.select is ALL or error_code in self.select:
+            return 'error'
+
+        if self.ignore is ALL or error_code in self.ignore:
+            return None
+
+        if self.warn is ALL or error_code in self.warn:
+            return 'warning'
+
+        if self.ignore or (self.select is not ALL and not self.select):
+            return 'error'
+
+        return None
+
 
 def get_error_code(msg):
     # type: (str) -> Optional[str]
@@ -190,49 +231,12 @@ def get_error_code(msg):
     return None
 
 
-def is_excluded_path(path, options):
-    for regex in options.exclude:
-        if regex.search(path):
-            return True
-    return False
-
-
 def get_options(filename, global_options, module_options):
     # type: (str, Options, List[Tuple[str, Options]]) -> Options
     for key, options in module_options:
-        for include in options.include:
-            if include.search(filename):
-                return options
+        if options.is_included_path(filename):
+            return options
     return global_options
-
-
-def get_status(options, error_code):
-    # type: (Options, str) -> Optional[str]
-    """
-    Determine whether an error code is an error, warning, or ignored
-
-    Parameters
-    ----------
-    options: Options
-    error_code: str
-
-    Returns
-    -------
-    Optional[str]
-    """
-    if options.select is ALL or error_code in options.select:
-        return 'error'
-
-    if options.ignore is ALL or error_code in options.ignore:
-        return None
-
-    if options.warn is ALL or error_code in options.warn:
-        return 'warning'
-
-    if options.ignore or (options.select is not ALL and not options.select):
-        return 'error'
-
-    return None
 
 
 def report(options, filename, lineno, status, msg,
@@ -332,7 +336,7 @@ def run(active_files, global_options, module_options, daemon_mode=False):
                 print(line, end='')
                 continue
 
-        if is_excluded_path(filename, global_options):
+        if global_options.is_excluded_path(filename):
             continue
 
         options = get_options(filename, global_options, module_options)
@@ -344,7 +348,7 @@ def run(active_files, global_options, module_options, daemon_mode=False):
         last_error = global_options, filename, lineno, msg, error_code
 
         if error_code and status == 'error':
-            new_status = get_status(options, error_code)
+            new_status = options.get_status(error_code)
             if new_status == 'error':
                 errors[filename] += 1
             elif new_status == 'warning':
