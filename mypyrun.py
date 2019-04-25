@@ -9,10 +9,7 @@ import fnmatch
 import json
 from collections import defaultdict
 
-if sys.version_info[0] == 3:
-    import configparser
-else:
-    import ConfigParser as configparser
+from backports import configparser
 
 if False:
     from typing import *
@@ -138,7 +135,7 @@ def colored(text, color=None, attrs=None):
     return text
 
 
-class Options:
+class Options(object):
     """
     Options common to both the config file and the cli.
 
@@ -319,8 +316,8 @@ def run(active_files, global_options, module_options, daemon_mode=False):
 
     # used to know when to error a note related to an error
     matched_error = None
-    errors = defaultdict(int)  # type: DefaultDict[str]
-    warnings = defaultdict(int)  # type: DefaultDict[str]
+    errors = defaultdict(int)  # type: DefaultDict[str, int]
+    warnings = defaultdict(int)  # type: DefaultDict[str, int]
     last_error = None  # type: Optional[Tuple[Options, Any, Any, Any, Optional[str]]]
 
     for line in proc.stdout:
@@ -513,7 +510,7 @@ config_types = {
 }
 
 
-class BaseOptionsParser:
+class BaseOptionsParser(object):
     def extract_updates(self, options):
         # type: (Options) -> Iterator[Tuple[Dict[str, object], Optional[str]]]
         raise NotImplementedError

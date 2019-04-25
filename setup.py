@@ -11,7 +11,7 @@ def read(*parts):
 
 setup(
     name="mypy-runner",
-    version="0.1.4",
+    version="0.1.5",
     author="Chad Dombrova",
     description="Run mypy with options to filter errors and colorize output",
     long_description=read("README.rst"),
@@ -22,6 +22,7 @@ setup(
     entry_points={
         'console_scripts': ['mypyrun=mypyrun:main'],
     },
+    install_requires=['configparser'],
     extras_require={
         "tests": [
             "coverage",
