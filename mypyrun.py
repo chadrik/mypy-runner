@@ -138,6 +138,14 @@ def colored(text, color=None, attrs=None):
     return text
 
 
+def match(regex_list, s):
+    # type: (List[Pattern], str) -> bool
+    for regex in regex_list:
+        if regex.search(s):
+            return True
+    return False
+
+
 class Options(object):
     """
     Options common to both the config file and the cli.
@@ -147,13 +155,19 @@ class Options(object):
         'ignore',
         'warn',
         'include',
+        'error_filters',
+        'warning_filters',
     ]
-
+    # error codes:
     select = None  # type: Optional[Set[str]]
     ignore = None  # type: Optional[Set[str]]
     warn = None  # type: Optional[Set[str]]
+    # paths:
     include = None  # type: List[Pattern]
     exclude = None  # type: List[Pattern]
+    # messages:
+    error_filters = None  # type: List[Pattern]
+    warning_filters = None  # type: List[Pattern]
 
     # global-only options:
     args = None  # type: List[str]
@@ -168,46 +182,44 @@ class Options(object):
         self.warn = set()
         self.include = []
         self.exclude = []
+        self.error_filters = []
+        self.warning_filters = []
         self.args = []
 
     def is_excluded_path(self, path):
         # type: (str) -> bool
-        for regex in self.exclude:
-            if regex.search(path):
-                return True
-        return False
+        return match(self.exclude, path)
 
     def is_included_path(self, path):
         # type: (str) -> bool
-        for regex in self.include:
-            if regex.search(path):
-                return True
-        return False
+        return match(self.include, path)
 
-    def get_status(self, error_code):
-        # type: (str) -> Optional[str]
+    def get_status(self, error_code, msg):
+        # type: (str, str) -> Optional[str]
         """
         Determine whether an error code is an error, warning, or ignored
 
         Parameters
         ----------
         error_code: str
+        msg : str
 
         Returns
         -------
         Optional[str]
+            Returns the new status, or None if it should be filtered
         """
         if self.select is ALL or error_code in self.select:
-            return 'error'
+            return 'error' if not match(self.error_filters, msg) else None
 
         if self.ignore is ALL or error_code in self.ignore:
             return None
 
         if self.warn is ALL or error_code in self.warn:
-            return 'warning'
+            return 'warning' if not match(self.warning_filters, msg) else None
 
         if self.ignore or (self.select is not ALL and not self.select):
-            return 'error'
+            return 'error' if not match(self.error_filters, msg) else None
 
         return None
 
@@ -341,7 +353,7 @@ def run(active_files, global_options, module_options):
         last_error = global_options, filename, lineno, msg, error_code
 
         if error_code and status == 'error':
-            new_status = options.get_status(error_code)
+            new_status = options.get_status(error_code, msg)
             if new_status == 'error':
                 errors[filename] += 1
             elif new_status == 'warning':
@@ -393,7 +405,7 @@ def main(argv=None):
         argv = sys.argv[1:]
 
     options = Options()
-    module_options = []
+    module_options = []  # type: List[Tuple[str, Options]]
 
     parser = get_parser()
 
@@ -449,7 +461,7 @@ def main(argv=None):
 # Options Handling
 
 def _parse_multi_options(options, split_token=','):
-    # type: (Union[str, List[str]], str) -> List[str]
+    # type: (str, str) -> List[str]
     r"""
     Split and strip and discard empties.
 
@@ -496,6 +508,11 @@ def _glob_list(s):
     return [_glob_to_regex(x) for x in _parse_multi_options(s)]
 
 
+def _regex_list(s):
+    # type: (str) -> List[Pattern]
+    return [re.compile(x) for x in _parse_multi_options(s)]
+
+
 def _error_set(s):
     # type: (str) -> Optional[Set[str]]
     result = set(_parse_multi_options(s))
@@ -511,6 +528,8 @@ config_types = {
     'args':  _parse_multi_options,
     'include': _glob_list,
     'exclude': _glob_list,
+    'error_filters': _regex_list,
+    'warning_filters': _regex_list,
 }
 
 
@@ -552,7 +571,7 @@ class ConfigFileOptionsParser(BaseOptionsParser):
         results = {}  # type: Dict[str, object]
         for key in section:
             if key in config_types:
-                ct = config_types[key]
+                ct = config_types[key]  # type: ignore
             else:
                 dv = getattr(template, key, None)
                 if dv is None:
@@ -750,6 +769,14 @@ def get_parser():
     parser.add_argument('--files', nargs="+", type=str,
                         help="Files to isolate (triggers use of 'active'"
                              "options for these files)")
+    parser.add_argument('--warning-filters', nargs="+", type=re.compile,
+                        default=argparse.SUPPRESS,
+                        help="Regular expression to ignore messages flagged as"
+                             " warnings")
+    parser.add_argument('--error-filters', nargs="+", type=re.compile,
+                        default=argparse.SUPPRESS,
+                        help="Regular expression to ignore messages flagged as"
+                             " errors")
     parser.add_argument('args', metavar='ARG', nargs='*', type=str,
                         default=argparse.SUPPRESS,
                         help="Regular mypy flags and files (precede with --)")
