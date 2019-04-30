@@ -339,6 +339,7 @@ def run(active_files, global_options, module_options):
     matched_error = None
     errors = defaultdict(int)  # type: DefaultDict[str, int]
     warnings = defaultdict(int)  # type: DefaultDict[str, int]
+    filtered = defaultdict(int)  # type: DefaultDict[str, int]
     last_error = None  # type: Optional[Tuple[Options, Any, Any, Any, Optional[str]]]
 
     for line in proc.stdout:
@@ -354,6 +355,7 @@ def run(active_files, global_options, module_options):
                 continue
 
         if global_options.is_excluded_path(filename):
+            filtered[filename] += 1
             continue
 
         options = get_options(filename, global_options, module_options)
@@ -370,25 +372,37 @@ def run(active_files, global_options, module_options):
                 errors[filename] += 1
             elif new_status == 'warning':
                 warnings[filename] += 1
+            elif new_status is None:
+                filtered[filename] += 1
+
             if global_options.show_ignored or new_status:
                 report(global_options, filename, lineno, new_status or 'error',
                        msg, not new_status, error_code)
                 matched_error = new_status, error_code
             else:
                 matched_error = None
+
         elif status == 'note' and matched_error is not None:
             report(global_options, filename, lineno, status, msg,
                    not matched_error[0], matched_error[1])
 
     def print_stat(key, value):
-        print("{:.<12}{:.>20}".format(key, value))
+        print("{:.<50}{:.>8}".format(key, value))
+
+    error_files = set(errors.keys())
+    warning_files = set(warnings.keys())
+    filtered_files = set(filtered.keys())
 
     print()
     print_stat("Errors", sum(errors.values()))
     print_stat("Warnings", sum(warnings.values()))
+    print_stat("Filtered", sum(filtered.values()))
+    print_stat("Files with errors or warnings (excluding filtered)",
+               len(error_files | warning_files))
+    print_stat("Files with errors or warnings (including filtered)",
+               len(error_files | warning_files | filtered_files))
+
     if active_files:
-        error_files = set(errors.keys())
-        warning_files = set(warnings.keys())
         clean_files = set(active_files).difference(error_files | warning_files)
         print_stat("Clean files", len(clean_files))
         # for x in sorted(clean_files):
