@@ -738,25 +738,25 @@ def get_parser():
 
     parser = argparse.ArgumentParser()
 
-    def add_invertible_flag(flag, default, help, inverse=None):
+    def add_invertible_flag(flag, help, inverse=None):
         if inverse is None:
             inverse = '--no-{}'.format(flag[2:])
 
         help += " (inverse: {})".format(inverse)
 
         arg = parser.add_argument(
-            flag, action='store_false' if default else 'store_true',
+            flag, action='store_true',
             help=help)
 
         dest = arg.dest
         arg = parser.add_argument(
-            inverse, action='store_true' if default else 'store_false',
+            inverse, action='store_false',
             dest=dest, help=argparse.SUPPRESS)
 
     parser.add_argument("--list",
                         help="List error codes",
                         action="store_true")
-    add_invertible_flag("--daemon", default=False,
+    add_invertible_flag("--daemon",
                         help="Run mypy in daemon mode")
     parser.add_argument("--select", "-s", nargs="+", type=str,
                         help="Errors to check")
@@ -764,7 +764,7 @@ def get_parser():
                         help="Errors to skip")
     parser.add_argument("--warn",  "-w",
                         help="Errors to convert into warnings (comma separated)")
-    add_invertible_flag("--color", default=True,
+    add_invertible_flag("--color",
                         help="Colorize output")
     parser.add_argument("--show-ignored", "-x",
                         help="Show errors that have been ignored (darker"
