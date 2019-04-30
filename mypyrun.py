@@ -3,6 +3,7 @@ from __future__ import absolute_import, print_function
 import argparse
 import subprocess
 import os
+import os.path
 import sys
 import re
 import fnmatch
@@ -100,6 +101,7 @@ GLOBAL_ONLY_OPTIONS = [
     'show_error_keys',
     'daemon',
     'exclude',
+    'mypy_executable',
 ]
 
 TERM_ATTRIBUTES = {
@@ -175,6 +177,7 @@ class Options(object):
     show_ignored = False
     show_error_keys = False
     daemon = False
+    mypy_executable = None  # type: Optional[str]
 
     def __init__(self):
         self.select = ALL
@@ -307,14 +310,23 @@ def run(active_files, global_options, module_options):
         exit status
     """
     if global_options.daemon:
-        args = ['dmypy', 'run', '--']
+        executable = 'dmypy'
+        if global_options.mypy_executable:
+            basedir = os.path.dirname(global_options.mypy_executable)
+            executable = os.path.join(basedir, executable)
+        args = ['run', '--']
     else:
-        args = ['mypy']
+        executable = 'mypy'
+        args = []
+
+    if global_options.mypy_executable:
+        basedir = os.path.dirname(global_options.mypy_executable)
+        executable = os.path.join(basedir, executable)
 
     if global_options.args:
         args.extend(global_options.args)
 
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+    proc = subprocess.Popen([executable] + args, stdout=subprocess.PIPE)
 
     active_options = dict(module_options).get('active')
     if active_options and active_files:
@@ -777,6 +789,8 @@ def get_parser():
                         default=argparse.SUPPRESS,
                         help="Regular expression to ignore messages flagged as"
                              " errors")
+    parser.add_argument("--mypy-executable", type=str,
+                        help="Path to the mypy executale")
     parser.add_argument('args', metavar='ARG', nargs='*', type=str,
                         default=argparse.SUPPRESS,
                         help="Regular mypy flags and files (precede with --)")
