@@ -1,15 +1,24 @@
 mypy-runner
 ===========
 
+Ease your way into static type checking by focusing on a small set of problems at a time.
+
+It can be quite challenging to get an existing code base to pass mypy's checks, even at its most lenient settings, and unfortunately, until you do you can't use mypy as part of your CI/CD process.
+
+``mypy-runner`` lets you gradually introduce type checking by identifying a subset of files and errors to check:
+
+- choose a set of files and errors to check
+- get tests passing and enforce them in your CI and pre-commit hooks
+- repeat
+
 Features
 --------
 
-Adds the following features to ``mypy``:
+``mypy-runner`` adds the following features to ``mypy``:
 
 - Display colorized output
-- Convert errors to warnings
-- Filter errors and warnings
-
+- Convert specific errors to warnings
+- Filter specific errors and warnings
 
 Options
 -------
