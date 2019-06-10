@@ -11,7 +11,7 @@ def read(*parts):
 
 setup(
     name="mypy-runner",
-    version="0.1.8",
+    version="0.2.0",
     author="Chad Dombrova",
     description="Run mypy with options to filter errors and colorize output",
     long_description=read("README.rst"),

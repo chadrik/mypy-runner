@@ -19,7 +19,7 @@ if False:
     from typing import *
     multi_options = Union[Sequence[str], str]
 
-__version__ = "0.1.8"
+__version__ = "0.2.0"
 
 # adapted from mypy:
 CONFIG_FILE = 'mypyrun.ini'
