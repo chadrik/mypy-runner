@@ -19,6 +19,8 @@ if False:
     from typing import *
     multi_options = Union[Sequence[str], str]
 
+__version__ = "0.1.8"
+
 # adapted from mypy:
 CONFIG_FILE = 'mypyrun.ini'
 SHARED_CONFIG_FILES = ('mypy.ini', 'setup.cfg')
@@ -848,6 +850,8 @@ def get_parser():
             inverse, action='store_false',
             dest=dest, help=argparse.SUPPRESS)
 
+    parser.add_argument('--version', action='version',
+                        version='%(prog)s {version}'.format(version=__version__))
     parser.add_argument("--list",
                         help="List error codes",
                         action="store_true")
