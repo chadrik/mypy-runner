@@ -466,6 +466,7 @@ def run(active_files, global_options, module_options):
     print_stat("Errors", sum(errors.values()))
     print_stat("Warnings", sum(warnings.values()))
     print_stat("Filtered", sum(filtered.values()))
+    print()
     print_stat("Files with errors or warnings (excluding filtered)",
                len(error_files | warning_files))
     print_stat("Files with errors or warnings (including filtered)",
