@@ -18,7 +18,7 @@ except ImportError:
 if False:
     from typing import *
 
-__version__ = "0.1.8"
+__version__ = "0.1.9"
 
 # adapted from mypy:
 CONFIG_FILE = 'mypyrun.ini'
