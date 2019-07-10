@@ -449,7 +449,7 @@ def main(argv=None):
         sys.exit(0)
 
     parsers = [
-        ConfigFileOptionsParser(),
+        ConfigFileOptionsParser(dummy.config_file),
         JsonEnvVarOptionsParser(),
         ArgparseOptionsParser(parser, argv)
     ]
@@ -795,6 +795,8 @@ def get_parser():
                              "configuration section (e.g. pass "
                              "--options=foo to use the [mypyrun-foo] "
                              "section)")
+    parser.add_argument("--config-file", "-c",
+                        help="Specific configuration file.")
     parser.add_argument('--files', nargs="+", type=str,
                         help="Files to isolate (triggers use of 'active'"
                              "options for these files)")
