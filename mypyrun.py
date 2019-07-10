@@ -71,6 +71,9 @@ _FILTERS = [
      '".*" defined the type as "None"\)'),
     # Other:
     ('incompatible_list_comprehension', 'List comprehension has incompatible type'),
+    ('incompatible_dict_comprehension', '(Key|Value) expression in dictionary comprehension has incompatible type'),
+    ('incompatible_list_item', 'List item \d+ has incompatible type'),
+    ('incompatible_dict_entry', 'Dict entry \d+ has incompatible type'),
     ('cannot_assign_to_method', 'Cannot assign to a method'),
     ('not_enough_arguments', 'Too few arguments'),
     ('not_callable', ' not callable'),
