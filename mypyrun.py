@@ -18,6 +18,10 @@ except ImportError:
 if False:
     from typing import *
 
+if sys.platform == 'win32':
+    from colorama import init
+    init() 
+
 # adapted from mypy:
 CONFIG_FILE = 'mypyrun.ini'
 SHARED_CONFIG_FILES = ('mypy.ini', 'setup.cfg')
