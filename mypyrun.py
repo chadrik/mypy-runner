@@ -17,6 +17,7 @@ except ImportError:
 
 if False:
     from typing import *
+    multi_options = Union[Sequence[str], str]
 
 # adapted from mypy:
 CONFIG_FILE = 'mypyrun.ini'
@@ -490,7 +491,7 @@ def main(argv=None):
 # Options Handling
 
 def _parse_multi_options(options, split_token=','):
-    # type: (str, str) -> List[str]
+    # type: (multi_options, str) -> List[str]
     r"""
     Split and strip and discard empties.
 
@@ -498,20 +499,22 @@ def _parse_multi_options(options, split_token=','):
 
     >>> _parse_multi_options("    A,\n    B,\n")
     ["A", "B"]
+    >>> _parse_multi_options(["A   ", "  B  "])
+    ["A", "B"]
+
 
     Parameters
     ----------
-    options : str
+    options : str or sequence
     split_token : str
 
     Returns
     -------
     List[str]
     """
-    if options:
-        return [o.strip() for o in options.split(split_token) if o.strip()]
-    else:
-        return []
+    if isinstance(options, str):
+        options = options.split(split_token)
+    return [o.strip() for o in options if o.strip()]
 
 
 def _validate(filters, error_codes):
@@ -533,17 +536,17 @@ def _glob_to_regex(s):
 
 
 def _glob_list(s):
-    # type: (str) -> List[Pattern]
+    # type: (multi_options) -> List[Pattern]
     return [_glob_to_regex(x) for x in _parse_multi_options(s)]
 
 
 def _regex_list(s):
-    # type: (str) -> List[Pattern]
+    # type: (multi_options) -> List[Pattern]
     return [re.compile(x) for x in _parse_multi_options(s)]
 
 
 def _error_set(s):
-    # type: (str) -> Optional[Set[str]]
+    # type: (multi_options) -> Optional[Set[str]]
     result = set(_parse_multi_options(s))
     if '*' in result:
         return None
@@ -686,6 +689,9 @@ class SplitNamespace(argparse.Namespace):
 
     def __setattr__(self, name, value):
         if hasattr(self._standard_namespace, name):
+            if name in config_types:
+                ct = config_types[name]
+                value = ct(value)
             setattr(self._standard_namespace, name, value)
         else:
             setattr(self._alt_namespace, name, value)
@@ -779,8 +785,8 @@ def get_parser():
                         help="Errors to check")
     parser.add_argument("--ignore",  "-i", nargs="+", type=str,
                         help="Errors to skip")
-    parser.add_argument("--warn",  "-w",
-                        help="Errors to convert into warnings (comma separated)")
+    parser.add_argument("--warn",  "-w", nargs="+", type=str,
+                        help="Errors to convert into warnings")
     add_invertible_flag("--color",
                         help="Colorize output")
     parser.add_argument("--show-ignored", "-x",
