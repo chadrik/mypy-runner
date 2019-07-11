@@ -96,6 +96,7 @@ FILTERS_SET = frozenset(n for n, s in FILTERS)
 COLORS = {
     'error': 'red',
     'warning': 'yellow',
+    'unhandled': 'white',
     'note': None,
 }
 
@@ -216,16 +217,21 @@ class Options(object):
         Optional[str]
             Returns the new status, or None if it should be filtered
         """
-        if self.select is ALL or error_code in self.select:
+
+        # We have specified something to check for
+        if self.select is not ALL and error_code in self.select:
             return 'error' if not match(self.error_filters, msg) else None
 
+        # We have specified something to ignore (specific selects override this)
         if self.ignore is ALL or error_code in self.ignore:
             return None
 
+        # We have specified something to warn (ignore overrides this)
         if self.warn is ALL or error_code in self.warn:
             return 'warning' if not match(self.warning_filters, msg) else None
 
-        if self.ignore or (self.select is not ALL and not self.select):
+        # We're checking everything!
+        if self.select is ALL:
             return 'error' if not match(self.error_filters, msg) else None
 
         return None
@@ -370,8 +376,8 @@ def run(active_files, global_options, module_options):
 
         last_error = global_options, filename, lineno, msg, error_code
 
-        if error_code and status == 'error':
-            new_status = options.get_status(error_code, msg)
+        if status == 'error':
+            new_status = options.get_status(error_code, msg) if error_code else 'unhandled'
             if new_status == 'error':
                 errors[filename] += 1
             elif new_status == 'warning':
@@ -385,7 +391,6 @@ def run(active_files, global_options, module_options):
                 matched_error = new_status, error_code
             else:
                 matched_error = None
-
         elif status == 'note' and matched_error is not None:
             report(global_options, filename, lineno, status, msg,
                    not matched_error[0], matched_error[1])
