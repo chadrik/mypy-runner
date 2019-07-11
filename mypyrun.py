@@ -90,8 +90,59 @@ _FILTERS = [
     ('abc_with_abstract_attr', "Cannot instantiate abstract class .* with abstract attribute"),
 ]
 
+FILTER_GROUPS = {
+    'env': {
+        'missing_module',
+    },
+    'code': {
+        'invalid_syntax',
+        'wrong_number_of_args',
+        'misplaced_annotation',
+        'not_defined',
+        'invalid_type_arguments',
+        'generator_expected',
+        'orphaned_overload',
+        'already_defined',
+        'need_annotation',
+    },
+    'signature': {
+        'return_expected',
+        'return_not_expected',
+        'incompatible_return',
+        'incompatible_yield',
+        'incompatible_arg',
+        'incompatible_default_arg',
+        'incompatible_subclass_signature',
+        'incompatible_subclass_return',
+        'incompatible_subclass_arg',
+        'incompatible_subclass_attr',
+    },
+    'usage': {
+        'no_attr_none_case',
+        'incompatible_subclass_attr_none_case'
+        'incompatible_list_comprehension',
+        'incompatible_dict_comprehension',
+        'incompatible_list_item',
+        'incompatible_dict_entry',
+        'cannot_assign_to_method',
+        'not_enough_arguments',
+        'not_callable',
+        'no_attr',
+        'not_indexable',
+        'invalid_index',
+        'not_iterable',
+        'not_assignable_by_index',
+        'no_matching_overload',
+        'incompatible_assignment',
+        'invalid_return_assignment',
+        'unsupported_operand',
+        'abc_with_abstract_attr',
+    },
+}
+
 FILTERS = [(n, re.compile(s)) for n, s in _FILTERS]
 FILTERS_SET = frozenset(n for n, s in FILTERS)
+
 
 COLORS = {
     'error': 'red',
@@ -552,9 +603,14 @@ def _regex_list(s):
 
 def _error_set(s):
     # type: (multi_options) -> Optional[Set[str]]
-    result = set(_parse_multi_options(s))
-    if '*' in result:
-        return None
+    result = set()
+    for res in _parse_multi_options(s):
+        if res == '*':
+            return None
+        elif res in FILTER_GROUPS:
+            result |= FILTER_GROUPS[res]
+        else:
+            result.add(res)
     return result
 
 
