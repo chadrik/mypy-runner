@@ -91,10 +91,10 @@ _FILTERS = [
 ]
 
 FILTER_GROUPS = {
-    'env': {
+    'env': { # Errors in the environment, not strictly with typing
         'missing_module',
     },
-    'code': {
+    'code': { # Errors that prevent type checking
         'invalid_syntax',
         'wrong_number_of_args',
         'misplaced_annotation',
@@ -105,7 +105,7 @@ FILTER_GROUPS = {
         'already_defined',
         'need_annotation',
     },
-    'signature': {
+    'signature': { # Errors in the definition of function/method signatures
         'return_expected',
         'return_not_expected',
         'incompatible_return',
@@ -116,32 +116,36 @@ FILTER_GROUPS = {
         'incompatible_subclass_return',
         'incompatible_subclass_arg',
         'incompatible_subclass_attr',
+        'abc_with_abstract_attr',
     },
-    'usage': {
+    'usage': { # Errors typically seen at runtime
         'no_attr_none_case',
-        'incompatible_subclass_attr_none_case'
-        'incompatible_list_comprehension',
-        'incompatible_dict_comprehension',
-        'incompatible_list_item',
-        'incompatible_dict_entry',
         'cannot_assign_to_method',
         'not_enough_arguments',
         'not_callable',
         'no_attr',
         'not_indexable',
-        'invalid_index',
         'not_iterable',
         'not_assignable_by_index',
+    },
+    'typing': { # Errors in type missmatches
+        'incompatible_subclass_attr_none_case'
+        'incompatible_list_comprehension',
+        'incompatible_dict_comprehension',
+        'incompatible_list_item',
+        'incompatible_dict_entry',
+        'invalid_index',
         'no_matching_overload',
         'incompatible_assignment',
         'invalid_return_assignment',
         'unsupported_operand',
-        'abc_with_abstract_attr',
     },
 }
 
+
 FILTERS = [(n, re.compile(s)) for n, s in _FILTERS]
 FILTERS_SET = frozenset(n for n, s in FILTERS)
+FILTER_GROUPS_REV = {f: g for g, fs in FILTER_GROUPS.items() for f in fs}
 
 
 COLORS = {
@@ -333,7 +337,8 @@ def report(options, filename, lineno, status, msg,
     """
     if not options.color:
         if options.show_error_keys and error_key:
-            msg = '%s: %s: %s' % (error_key, status, msg)
+            group = FILTER_GROUPS_REV.get(error_key, '-')
+            msg = '(%s) %s: %s: %s' % (group, error_key, status, msg)
         else:
             msg = '%s: %s' % (status, msg)
 
@@ -348,7 +353,8 @@ def report(options, filename, lineno, status, msg,
         color = COLORS[status]
         status = colored(status + ': ', color, attrs=display_attrs)
         if options.show_error_keys and error_key:
-            status = colored(error_key + ': ', 'magenta',
+            group = FILTER_GROUPS_REV.get(error_key, '-')
+            status = colored('(%s) %s: ' % (group, error_key), 'magenta',
                              attrs=display_attrs) + status
         msg = colored(msg, color, attrs=display_attrs)
         outline = filename + lineno + status + msg
@@ -501,8 +507,9 @@ def main(argv=None):
     # error_codes = get_error_codes()
 
     if dummy.list:
-        for name, pattern in sorted(_FILTERS):
-            print('  %s: %r' % (name, pattern))
+        paired = ((FILTER_GROUPS_REV.get(n, '---'), n, ptn) for n, ptn in _FILTERS)
+        for group, name, pattern in sorted(paired):
+            print('  (%s) %s: %r' % (group, name, pattern))
         sys.exit(0)
 
     parsers = [
