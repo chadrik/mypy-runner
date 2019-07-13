@@ -22,7 +22,7 @@ setup(
     entry_points={
         'console_scripts': ['mypyrun=mypyrun:main'],
     },
-    install_requires=['configparser'],
+    install_requires=['configparser', 'colorama'],
     extras_require={
         "tests": [
             "coverage",
