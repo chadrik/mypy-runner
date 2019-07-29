@@ -88,6 +88,9 @@ _FILTERS = [
     ('invalid_return_assignment', 'does not return a value'),
     ('unsupported_operand', 'Unsupported .*operand '),
     ('abc_with_abstract_attr', "Cannot instantiate abstract class .* with abstract attribute"),
+
+    # Anything we missed
+    ("uncategorized", ".+"),
 ]
 
 FILTER_GROUPS = {
@@ -151,7 +154,6 @@ FILTER_GROUPS_REV = {f: g for g, fs in FILTER_GROUPS.items() for f in fs}
 COLORS = {
     'error': 'red',
     'warning': 'yellow',
-    'unhandled': 'white',
     'note': None,
 }
 
@@ -434,7 +436,7 @@ def run(active_files, global_options, module_options):
         last_error = global_options, filename, lineno, msg, error_code
 
         if status == 'error':
-            new_status = options.get_status(error_code, msg) if error_code else 'unhandled'
+            new_status = options.get_status(error_code, msg)
             if new_status == 'error':
                 errors[filename] += 1
             elif new_status == 'warning':
