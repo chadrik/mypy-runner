@@ -20,41 +20,61 @@ Features
 - Convert specific errors to warnings
 - Filter specific errors and warnings
 
+Compatibility
+-------------
+
+``mypy-runner`` supports ``mypy`` 0.730 and higher.
+
 Options
 -------
 
 ::
 
-    usage: mypyrun [-h] [--list] [--daemon] [--select SELECT] [--ignore IGNORE]
-                   [--warn WARN] [--no-color] [--show-ignored] [--show-error-keys]
-                   [--options OPTIONS]
-                   [files [files ...]]
+    usage: mypyrun.py [-h] [--version] [--daemon] [--select SELECT [SELECT ...]]
+                      [--ignore IGNORE [IGNORE ...]] [--warn WARN [WARN ...]]
+                      [--color] [--show-ignored] [--options OPTIONS]
+                      [--config-file CONFIG_FILE] [--files FILES [FILES ...]]
+                      [--warning-filters WARNING_FILTERS [WARNING_FILTERS ...]]
+                      [--error-filters ERROR_FILTERS [ERROR_FILTERS ...]]
+                      [--mypy-executable MYPY_EXECUTABLE]
+                      [ARG [ARG ...]]
 
     positional arguments:
-      files                 Files to isolate (triggers use of 'active'options for
-                            these files)
+      ARG                   Regular mypy flags and files (precede with --)
 
     optional arguments:
       -h, --help            show this help message and exit
-      --list                list error codes
-      --daemon, -d          run in daemon mode (dmypy run)
-      --select SELECT, -s SELECT
-                            Errors to check (comma separated)
-      --ignore IGNORE, -i IGNORE
-                            Errors to skip (comma separated)
-      --warn WARN, -w WARN  Errors to convert into warnings (comma separated)
-      --no-color            do not colorize output
+      --version             show program's version number and exit
+      --daemon              Run mypy in daemon mode (inverse: --no-daemon)
+      --select SELECT [SELECT ...], -s SELECT [SELECT ...]
+                            Errors to check
+      --ignore IGNORE [IGNORE ...], -i IGNORE [IGNORE ...]
+                            Errors to skip
+      --warn WARN [WARN ...], -w WARN [WARN ...]
+                            Errors to convert into warnings
+      --color               Colorize output (inverse: --no-color)
       --show-ignored, -x    Show errors that have been ignored (darker if using
                             color)
-      --show-error-keys     Show error key for each line
       --options OPTIONS, -o OPTIONS
                             Override the default options to use the
                             namedconfiguration section (e.g. pass --options=foo to
                             use the [mypyrun-foo] section)
+      --config-file CONFIG_FILE, -c CONFIG_FILE
+                            Specific configuration file.
+      --files FILES [FILES ...]
+                            Files to isolate (triggers use of 'active'options for
+                            these files)
+      --warning-filters WARNING_FILTERS [WARNING_FILTERS ...]
+                            Regular expression to ignore messages flagged as
+                            warnings
+      --error-filters ERROR_FILTERS [ERROR_FILTERS ...]
+                            Regular expression to ignore messages flagged as
+                            errors
+      --mypy-executable MYPY_EXECUTABLE
+                            Path to the mypy executable
 
 As with tools like ``flake8``, you use specific error codes to enable or disable error output.
 Errors that are ignored or converted into warnings will not trigger a non-zero exit status.
-To see the list of error codes and their regex pattern, run ``mypyrun --list``.
 
 Configuration
 -------------

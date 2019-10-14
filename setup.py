@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 import os.path
 
 HERE = os.path.abspath(os.path.dirname(__file__))
@@ -11,7 +11,7 @@ def read(*parts):
 
 setup(
     name="mypy-runner",
-    version="0.2.0",
+    version="0.3.0",
     author="Chad Dombrova",
     description="Run mypy with options to filter errors and colorize output",
     long_description=read("README.rst"),
@@ -26,8 +26,9 @@ setup(
     extras_require={
         "tests": [
             "coverage",
-            "pytest==3.6.2",
-            "tox==2.7.0",
+            "pytest==5.2.0",
+            "tox==3.14.0",
+            "mypy==0.730",
         ],
     },
     classifiers=[

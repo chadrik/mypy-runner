@@ -19,7 +19,12 @@ if False:
     from typing import *
     multi_options = Union[Sequence[str], str]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
+
+if sys.version_info[0] < 3:
+    string_types = (str, unicode)
+else:
+    string_types = str
 
 # adapted from mypy:
 CONFIG_FILE = 'mypyrun.ini'
@@ -31,128 +36,9 @@ ALL = None
 
 # choose an exit that does not conflict with mypy's
 PARSING_FAIL = 100
+ERROR_CODE = re.compile(r'\[([a-z0-9\-_]+)\]\n$')
 
-_FILTERS = [
-    ('revealed_type', 'Revealed type is'),
-    # DEFINITION ERRORS --
-    # Type annotation errors:
-    ('invalid_syntax', 'syntax error in type comment'),
-    ('wrong_number_of_args', 'Type signature has '),
-    ('misplaced_annotation', 'misplaced type annotation'),
-    ('not_defined', ' is not defined'),  # in seminal
-    ('invalid_type_arguments', '(".*" expects .* type argument)'  # in typeanal
-                               '(Optional.* must have exactly one type argument)'
-                               '(is not subscriptable)'),
-    ('generator_expected', 'The return type of a generator function should be '),  # in messages
-    # Advanced signature errors:
-    ('orphaned_overload', 'Overloaded .* will never be matched'),  # in messages
-    ('already_defined', 'already defined'),  # in seminal
-    # Signature incompatible with function internals:
-    ('return_expected', 'Return value expected'),
-    ('return_not_expected', 'No return value expected'),
-    ('incompatible_return', 'Incompatible return value type'),
-    ('incompatible_yield', 'Incompatible types in "yield"'),
-    ('incompatible_arg', 'Argument .* has incompatible type'),
-    ('incompatible_default_arg', 'Incompatible default for argument'),
-    # Signature/class incompatible with super class:
-    ('incompatible_subclass_signature', 'Signature .* incompatible with supertype'),
-    ('incompatible_subclass_return', 'Return type .* incompatible with supertype'),
-    ('incompatible_subclass_arg', 'Argument .* incompatible with supertype'),
-    ('incompatible_subclass_attr', 'Incompatible types in assignment '
-                                   '\(expression has type ".*", base class '
-                                   '".*" defined the type as ".*"\)'),
-
-    # MISC --
-    ('need_annotation', 'Need type annotation'),
-    ('missing_module', 'Cannot find module '),
-
-    # USAGE ERRORS --
-    # Special case Optional/None issues:
-    ('no_attr_none_case', 'Item "None" of ".*" has no attribute'),
-    ('incompatible_subclass_attr_none_case',
-     'Incompatible types in assignment \(expression has type ".*", base class '
-     '".*" defined the type as "None"\)'),
-    # Other:
-    ('incompatible_list_comprehension', 'List comprehension has incompatible type'),
-    ('incompatible_dict_comprehension', '(Key|Value) expression in dictionary comprehension has incompatible type'),
-    ('incompatible_list_item', 'List item \d+ has incompatible type'),
-    ('incompatible_dict_entry', 'Dict entry \d+ has incompatible type'),
-    ('cannot_assign_to_method', 'Cannot assign to a method'),
-    ('not_enough_arguments', 'Too few arguments'),
-    ('not_callable', ' not callable'),
-    ('module_has_no_attr', 'Module has no attribute'),
-    ('object_has_no_attr', '.* has no attribute'),
-    ('not_indexable', ' not indexable'),
-    ('invalid_index', 'Invalid index type'),
-    ('not_iterable', ' not iterable'),
-    ('not_assignable_by_index', 'Unsupported target for indexed assignment'),
-    ('no_matching_overload', 'No overload variant of .* matches argument type'),
-    ('incompatible_assignment', 'Incompatible types in assignment'),
-    ('invalid_return_assignment', 'does not return a value'),
-    ('unsupported_operand', 'Unsupported .*operand '),
-    ('abc_with_abstract_attr', "Cannot instantiate abstract class .* with abstract attribute"),
-
-    # Anything we missed
-    ("uncategorized", ".+"),
-]
-
-FILTER_GROUPS = {
-    'env': { # Errors in the environment, not strictly with typing
-        'missing_module',
-    },
-    'code': { # Errors that prevent type checking
-        'invalid_syntax',
-        'wrong_number_of_args',
-        'misplaced_annotation',
-        'not_defined',
-        'invalid_type_arguments',
-        'generator_expected',
-        'orphaned_overload',
-        'already_defined',
-        'need_annotation',
-    },
-    'signature': { # Errors in the definition of function/method signatures
-        'return_expected',
-        'return_not_expected',
-        'incompatible_return',
-        'incompatible_yield',
-        'incompatible_arg',
-        'incompatible_default_arg',
-        'incompatible_subclass_signature',
-        'incompatible_subclass_return',
-        'incompatible_subclass_arg',
-        'incompatible_subclass_attr',
-        'abc_with_abstract_attr',
-    },
-    'usage': { # Errors typically seen at runtime
-        'no_attr_none_case',
-        'cannot_assign_to_method',
-        'not_enough_arguments',
-        'not_callable',
-        'no_attr',
-        'not_indexable',
-        'not_iterable',
-        'not_assignable_by_index',
-    },
-    'typing': { # Errors in type missmatches
-        'incompatible_subclass_attr_none_case'
-        'incompatible_list_comprehension',
-        'incompatible_dict_comprehension',
-        'incompatible_list_item',
-        'incompatible_dict_entry',
-        'invalid_index',
-        'no_matching_overload',
-        'incompatible_assignment',
-        'invalid_return_assignment',
-        'unsupported_operand',
-    },
-}
-
-
-FILTERS = [(n, re.compile(s)) for n, s in _FILTERS]
-FILTERS_SET = frozenset(n for n, s in FILTERS)
-FILTER_GROUPS_REV = {f: g for g, fs in FILTER_GROUPS.items() for f in fs}
-
+REVEALED_TYPE = 'Revealed type is'
 
 COLORS = {
     'error': 'red',
@@ -163,7 +49,6 @@ COLORS = {
 GLOBAL_ONLY_OPTIONS = [
     'color',
     'show_ignored',
-    'show_error_keys',
     'daemon',
     'exclude',
     'mypy_executable',
@@ -240,7 +125,6 @@ class Options(object):
     args = None  # type: List[str]
     color = True
     show_ignored = False
-    show_error_keys = False
     daemon = False
     mypy_executable = None  # type: Optional[str]
 
@@ -277,7 +161,6 @@ class Options(object):
         Optional[str]
             Returns the new status, or None if it should be filtered
         """
-
         # We have specified something to check for
         if self.select is not ALL and error_code in self.select:
             return 'error' if not match(self.error_filters, msg) else None
@@ -310,9 +193,9 @@ def get_error_code(msg):
     -------
     Optional[str]
     """
-    for code, regex in FILTERS:
-        if regex.search(msg):
-            return code
+    m = ERROR_CODE.search(msg)
+    if m:
+        return m.group(1)
     return None
 
 
@@ -341,12 +224,7 @@ def report(options, filename, lineno, status, msg,
     error_key : Optional[str]
     """
     if not options.color:
-        if options.show_error_keys and error_key:
-            group = FILTER_GROUPS_REV.get(error_key, '-')
-            msg = '(%s) %s: %s: %s' % (group, error_key, status, msg)
-        else:
-            msg = '%s: %s' % (status, msg)
-
+        msg = '%s: %s' % (status, msg)
         outline = 'IGNORED ' if options.show_ignored and is_filtered else ''
         outline += '%s:%s: %s' % (filename, lineno, msg)
 
@@ -357,10 +235,6 @@ def report(options, filename, lineno, status, msg,
         lineno = colored(':%s: ' % lineno, attrs=display_attrs)
         color = COLORS[status]
         status = colored(status + ': ', color, attrs=display_attrs)
-        if options.show_error_keys and error_key:
-            group = FILTER_GROUPS_REV.get(error_key, '-')
-            status = colored('(%s) %s: ' % (group, error_key), 'magenta',
-                             attrs=display_attrs) + status
         msg = colored(msg, color, attrs=display_attrs)
         outline = filename + lineno + status + msg
 
@@ -395,6 +269,8 @@ def run(active_files, global_options, module_options):
         basedir = os.path.dirname(global_options.mypy_executable)
         executable = os.path.join(basedir, executable)
 
+    args.append('--show-error-codes')
+
     if global_options.args:
         args.extend(global_options.args)
 
@@ -409,13 +285,15 @@ def run(active_files, global_options, module_options):
 
     # used to know when to error a note related to an error
     matched_error = None
+    errors_by_type = defaultdict(int)  # type: DefaultDict[str, int]
     errors = defaultdict(int)  # type: DefaultDict[str, int]
     warnings = defaultdict(int)  # type: DefaultDict[str, int]
     filtered = defaultdict(int)  # type: DefaultDict[str, int]
     last_error = None  # type: Optional[Tuple[Options, Any, Any, Any, Optional[str]]]
 
-    for line in proc.stdout:
-        line = line.decode()
+    for raw_line in proc.stdout:
+        line = raw_line.decode()
+
         try:
             filename, lineno, status, msg = line.split(':', 3)
         except ValueError:
@@ -439,9 +317,11 @@ def run(active_files, global_options, module_options):
         last_error = global_options, filename, lineno, msg, error_code
 
         if status == 'error':
+            # print(error_code, repr(msg), options.select)
             new_status = options.get_status(error_code, msg)
             if new_status == 'error':
                 errors[filename] += 1
+                errors_by_type[error_code] += 1
             elif new_status == 'warning':
                 warnings[filename] += 1
             elif new_status is None:
@@ -456,6 +336,8 @@ def run(active_files, global_options, module_options):
         elif status == 'note' and matched_error is not None:
             report(global_options, filename, lineno, status, msg,
                    not matched_error[0], matched_error[1])
+        elif status == 'note' and msg.startswith(REVEALED_TYPE):
+            report(global_options, filename, lineno, status, msg, False)
 
     def print_stat(key, value):
         print("{:.<50}{:.>8}".format(key, value))
@@ -468,6 +350,10 @@ def run(active_files, global_options, module_options):
     print_stat("Errors", sum(errors.values()))
     print_stat("Warnings", sum(warnings.values()))
     print_stat("Filtered", sum(filtered.values()))
+    print()
+    for (code, count) in sorted(errors_by_type.items(), key=lambda v: v[1],
+                                reverse=True):
+        print_stat(code, count)
     print()
     print_stat("Files with errors or warnings (excluding filtered)",
                len(error_files | warning_files))
@@ -510,14 +396,6 @@ def main(argv=None):
     dummy = argparse.Namespace()
     parser.parse_args(argv, dummy)
 
-    # error_codes = get_error_codes()
-
-    if dummy.list:
-        paired = ((FILTER_GROUPS_REV.get(n, '---'), n, ptn) for n, ptn in _FILTERS)
-        for group, name, pattern in sorted(paired):
-            print('  (%s) %s: %r' % (group, name, pattern))
-        sys.exit(0)
-
     parsers = [
         ConfigFileOptionsParser(dummy.config_file),
         JsonEnvVarOptionsParser(),
@@ -546,14 +424,6 @@ def main(argv=None):
                   'ignored: %s' % ', '.join(overlap), file=sys.stderr)
             sys.exit(PARSING_FAIL)
 
-    # _validate(options.select, error_codes)
-    # _validate(options.ignore, error_codes)
-    # _validate(options.warn, error_codes)
-    #
-    # unused = set(error_codes).difference(options.ignore)
-    # unused = unused.difference(options.select)
-    # _validate(unused, error_codes)
-
     sys.exit(run(dummy.files, options, module_options))
 
 
@@ -581,23 +451,9 @@ def _parse_multi_options(options, split_token=','):
     -------
     List[str]
     """
-    if isinstance(options, str):
+    if isinstance(options, string_types):
         options = options.split(split_token)
     return [o.strip() for o in options if o.strip()]
-
-
-def _validate(filters, error_codes):
-    # type: (Set[str], Set[str]) -> None
-    """
-    Parameters
-    ----------
-    filters : Set[str]
-    error_codes : Set[str]
-    """
-    invalid = sorted(filters.difference(error_codes))
-    if invalid:
-        print('Invalid filter(s): %s\n' % ', '.join(invalid), file=sys.stderr)
-        sys.exit(PARSING_FAIL)
 
 
 def _glob_to_regex(s):
@@ -620,8 +476,6 @@ def _error_set(s):
     for res in _parse_multi_options(s):
         if res == '*':
             return None
-        elif res in FILTER_GROUPS:
-            result |= FILTER_GROUPS[res]
         else:
             result.add(res)
     return result
@@ -681,7 +535,8 @@ class ConfigFileOptionsParser(BaseOptionsParser):
             else:
                 dv = getattr(template, key, None)
                 if dv is None:
-                    print("%s: Unrecognized option: %s = %s" % (prefix, key, section[key]),
+                    print("%s: Unrecognized option: %s = %s" %
+                          (prefix, key, section[key]),
                           file=sys.stderr)
                     continue
                 ct = type(dv)
@@ -693,10 +548,12 @@ class ConfigFileOptionsParser(BaseOptionsParser):
                     try:
                         v = ct(section.get(key))
                     except argparse.ArgumentTypeError as err:
-                        print("%s: %s: %s" % (prefix, key, err), file=sys.stderr)
+                        print("%s: %s: %s" % (prefix, key, err),
+                              file=sys.stderr)
                         continue
                 else:
-                    print("%s: Don't know what type %s should have" % (prefix, key), file=sys.stderr)
+                    print("%s: Don't know what type %s should have" %
+                          (prefix, key), file=sys.stderr)
                     continue
             except ValueError as err:
                 print("%s: %s: %s" % (prefix, key, err), file=sys.stderr)
@@ -744,7 +601,8 @@ class ConfigFileOptionsParser(BaseOptionsParser):
                 updates = self._parse_section(prefix, options, section)
 
                 if set(updates).intersection(GLOBAL_ONLY_OPTIONS):
-                    print("%s: Per-module sections should only specify per-module flags (%s)" %
+                    print("%s: Per-module sections should only specify "
+                          "per-module flags (%s)" %
                           (prefix, ', '.join(sorted(set(updates).intersection(GLOBAL_ONLY_OPTIONS)))),
                           file=sys.stderr)
                     updates = {k: v for k, v in updates.items() if k in Options.PER_MODULE_OPTIONS}
@@ -820,16 +678,6 @@ class JsonEnvVarOptionsParser(JsonOptionsParser):
         super(JsonEnvVarOptionsParser, self).__init__(json_data)
 
 
-def get_error_codes():
-    # type: () -> FrozenSet[str]
-    """
-    Returns
-    -------
-    FrozenSet[str]
-    """
-    return FILTERS_SET
-
-
 def get_parser():
     # type: () -> argparse.ArgumentParser
 
@@ -852,9 +700,6 @@ def get_parser():
 
     parser.add_argument('--version', action='version',
                         version='%(prog)s {version}'.format(version=__version__))
-    parser.add_argument("--list",
-                        help="List error codes",
-                        action="store_true")
     add_invertible_flag("--daemon",
                         help="Run mypy in daemon mode")
     parser.add_argument("--select", "-s", nargs="+", type=str,
@@ -868,9 +713,6 @@ def get_parser():
     parser.add_argument("--show-ignored", "-x",
                         help="Show errors that have been ignored (darker"
                              " if using color)",
-                        action="store_true")
-    parser.add_argument("--show-error-keys",
-                        help="Show error key for each line",
                         action="store_true")
     parser.add_argument("--options",  "-o",
                         help="Override the default options to use the named"
@@ -891,7 +733,7 @@ def get_parser():
                         help="Regular expression to ignore messages flagged as"
                              " errors")
     parser.add_argument("--mypy-executable", type=str,
-                        help="Path to the mypy executale")
+                        help="Path to the mypy executable")
     parser.add_argument('args', metavar='ARG', nargs='*', type=str,
                         default=argparse.SUPPRESS,
                         help="Regular mypy flags and files (precede with --)")
