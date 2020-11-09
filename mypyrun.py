@@ -13,7 +13,7 @@ from collections import defaultdict
 try:
     import configparser
 except ImportError:
-    from backports import configparser
+    from backports import configparser  # type: ignore[no-redef]
 
 if False:
     from typing import *
@@ -181,7 +181,7 @@ class Options(object):
 
 
 def get_error_code(msg):
-    # type: (str) -> Optional[str]
+    # type: (str) -> str
     """
     Lookup the error constant from a parsed message literal.
 
@@ -191,12 +191,12 @@ def get_error_code(msg):
 
     Returns
     -------
-    Optional[str]
+    str
     """
     m = ERROR_CODE.search(msg)
     if m:
         return m.group(1)
-    return None
+    return 'Unknown'
 
 
 def get_options(filename, global_options, module_options):
@@ -289,9 +289,10 @@ def run(active_files, global_options, module_options):
     errors = defaultdict(int)  # type: DefaultDict[str, int]
     warnings = defaultdict(int)  # type: DefaultDict[str, int]
     filtered = defaultdict(int)  # type: DefaultDict[str, int]
-    last_error = None  # type: Optional[Tuple[Options, Any, Any, Any, Optional[str]]]
+    last_error = None  # type: Optional[Tuple[Options, Any, Any, Any, str]]
 
-    for raw_line in proc.stdout:
+    output = proc.stdout or []  # type: Iterable[bytes]
+    for raw_line in output:
         line = raw_line.decode()
 
         try:
@@ -490,7 +491,7 @@ config_types = {
     'exclude': _glob_list,
     'error_filters': _regex_list,
     'warning_filters': _regex_list,
-}
+}  # type: Dict[str, Callable[[Any], Any]]
 
 
 class BaseOptionsParser(object):
@@ -531,7 +532,7 @@ class ConfigFileOptionsParser(BaseOptionsParser):
         results = {}  # type: Dict[str, object]
         for key in section:
             if key in config_types:
-                ct = config_types[key]  # type: ignore
+                ct = config_types[key]
             else:
                 dv = getattr(template, key, None)
                 if dv is None:
@@ -660,7 +661,7 @@ class JsonOptionsParser(BaseOptionsParser):
             for key, v in self.json_data.items():
                 if key in config_types:
                     ct = config_types[key]
-                    v = ct(v)
+                    v = ct(v)  # type: ignore[operator]
                 else:
                     dv = getattr(options, key, None)
                     if dv is None:
@@ -724,11 +725,11 @@ def get_parser():
     parser.add_argument('--files', nargs="+", type=str,
                         help="Files to isolate (triggers use of 'active'"
                              "options for these files)")
-    parser.add_argument('--warning-filters', nargs="+", type=re.compile,
+    parser.add_argument('--warning-filters', nargs="+", type=re.compile,  # type: ignore[arg-type]
                         default=argparse.SUPPRESS,
                         help="Regular expression to ignore messages flagged as"
                              " warnings")
-    parser.add_argument('--error-filters', nargs="+", type=re.compile,
+    parser.add_argument('--error-filters', nargs="+", type=re.compile,  # type: ignore[arg-type]
                         default=argparse.SUPPRESS,
                         help="Regular expression to ignore messages flagged as"
                              " errors")
