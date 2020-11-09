@@ -1,0 +1,57 @@
+[tool.poetry]
+name = "mypy-runner"
+version = "0.3.1"
+description = "Run mypy with options to filter errors and colorize output"
+authors = ["Chad Dombrova <chadrik@gmail.com>"]
+license = "MIT"
+readme = "README.rst"
+repository = "https://github.com/chadrik/mypy-runner"
+packages = [
+    { include = "mypyrun.py" },
+]
+keywords = ["pep484", "typing", "annotations", "mypy"]
+classifiers = [
+    # How mature is this project? Common values are
+    #   3 - Alpha
+    #   4 - Beta
+    #   5 - Production/Stable
+    'Development Status :: 5 - Production/Stable',
+
+    # Indicate who your project is intended for
+    'Intended Audience :: Developers',
+    'Topic :: Software Development :: Build Tools',
+
+    # Pick your license as you wish (should match "license" above)
+    'License :: OSI Approved :: MIT License',
+
+    # Specify the Python versions you support here. In particular, ensure
+    # that you indicate whether you support Python 2, Python 3 or both.
+    'Programming Language :: Python :: 2',
+    'Programming Language :: Python :: 2.7',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.6',
+    'Programming Language :: Python :: 3.7',
+]
+
+[tool.poetry.scripts]
+mypyrun = 'mypyrun:main'
+
+[tool.poetry.dependencies]
+configparser = "*"
+
+pytest = { version = "^6.1", optional = true }
+coverage = { version = "*", optional = true }
+
+[tool.poetry.extras]
+tests = [
+    "pytest",
+    "coverage",
+    "mypy",
+]
+
+[tool.poetry.dev-dependencies]
+tox = "^3.20"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

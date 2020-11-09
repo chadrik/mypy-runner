@@ -19,7 +19,7 @@ if False:
     from typing import *
     multi_options = Union[Sequence[str], str]
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 if sys.version_info[0] < 3:
     string_types = (str, unicode)
