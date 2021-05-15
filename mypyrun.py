@@ -26,6 +26,10 @@ if sys.version_info[0] < 3:
 else:
     string_types = str
 
+if sys.platform == 'win32':
+    from colorama import init
+    init() 
+
 # adapted from mypy:
 CONFIG_FILE = 'mypyrun.ini'
 SHARED_CONFIG_FILES = ('mypy.ini', 'setup.cfg')
