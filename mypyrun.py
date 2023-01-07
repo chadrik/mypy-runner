@@ -17,6 +17,7 @@ except ImportError:
 
 if False:
     from typing import *
+    from typing import Pattern
     multi_options = Union[Sequence[str], str]
 
 __version__ = "0.3.1"
@@ -37,6 +38,8 @@ ALL = None
 # choose an exit that does not conflict with mypy's
 PARSING_FAIL = 100
 ERROR_CODE = re.compile(r'\[([a-z0-9\-_]+)\]\n$')
+IMPORT_SUGGESTION = re.compile(r'from typing import ([a-zA-Z_][a-zA-Z0-9_]*)')
+NAMED_DEFINED = re.compile(r'Name "([a-zA-Z_][a-zA-Z0-9_]*)" is not defined')
 
 REVEALED_TYPE = 'Revealed type is'
 
@@ -52,6 +55,7 @@ GLOBAL_ONLY_OPTIONS = [
     'daemon',
     'exclude',
     'mypy_executable',
+    'add_missing_imports',
 ]
 
 TERM_ATTRIBUTES = {
@@ -75,6 +79,22 @@ TERM_COLORS = {
 }
 
 TERM_RESET = '\033[0m'
+
+EXTRA_TYPING_TYPES = set(['NamedTuple', 'Pattern', 'Match', 'Literal', 'TypedDict', 'Type'])
+
+try:
+    import typing
+except ImportError:
+    pass
+else:
+    EXTRA_TYPING_TYPES.update(x for x in typing.__all__ if x[0].isupper())
+
+try:
+    import typing_extensions
+except ImportError:
+    pass
+else:
+    EXTRA_TYPING_TYPES.update(x for x in typing_extensions.__all__ if x[0].isupper())
 
 
 def colored(text, color=None, attrs=None):
@@ -127,6 +147,7 @@ class Options(object):
     show_ignored = False
     daemon = False
     mypy_executable = None  # type: Optional[str]
+    add_missing_imports = False
 
     def __init__(self):
         self.select = ALL
@@ -180,6 +201,71 @@ class Options(object):
         return None
 
 
+def _read_python_source(filename):
+    """
+    Do our best to decode a Python source file correctly.
+    """
+    import io
+    from lib2to3.pgen2 import tokenize
+
+    try:
+        f = open(filename, "rb")
+    except OSError as err:
+        print("Can't open %s: %s" % (filename, err), file=sys.stderr)
+        return None, None
+    try:
+        encoding = tokenize.detect_encoding(f.readline)[0]
+    finally:
+        f.close()
+    with io.open(filename, "r", encoding=encoding, newline='') as f:
+        return f.read(), encoding
+
+
+def write_file(new_text, filename, encoding=None):
+    """Writes a string to a file.
+    """
+    import io
+
+    try:
+        fp = io.open(filename, "w", encoding=encoding, newline='')
+    except OSError as err:
+        print("Can't create %s: %s" % (filename, err), file=sys.stderr)
+        return
+
+    with fp:
+        try:
+            fp.write(new_text)
+        except OSError as err:
+            print("Can't write %s: %s" % (filename, err), file=sys.stderr)
+    print("Fixed imports for %s" % filename)
+
+
+def add_typing_imports(filename, imports):
+    # type: (str, Iterable[str]) -> bool
+    import lib2to3.pgen2.driver
+    from lib2to3 import pytree, pygram
+    from lib2to3.fixer_util import touch_import
+
+    data, encoding = _read_python_source(filename)
+    if data is None:
+        # Reading the file failed.
+        return False
+    data += "\n"  # Silence certain parse errors
+
+    grammar = pygram.python_grammar_no_print_statement
+    driver = lib2to3.pgen2.driver.Driver(
+        grammar, convert=pytree.convert)
+    tree = driver.parse_string(data)
+    for name in imports:
+        touch_import('typing', name, tree)
+
+    if tree and tree.was_changed:
+        # The [:-1] is to take off the \n we added earlier
+        write_file(str(tree)[:-1], filename, encoding=encoding)
+        return True
+    return False
+
+
 def get_error_code(msg):
     # type: (str) -> str
     """
@@ -199,11 +285,21 @@ def get_error_code(msg):
     return 'Unknown'
 
 
+_cached_options = {}  # type: Dict[str, Options]
+
+
 def get_options(filename, global_options, module_options):
     # type: (str, Options, List[Tuple[str, Options]]) -> Options
+    try:
+        return _cached_options[filename]
+    except KeyError:
+        pass
+
     for key, options in module_options:
         if options.is_included_path(filename):
+            _cached_options[filename] = options
             return options
+    _cached_options[filename] = global_options
     return global_options
 
 
@@ -284,11 +380,12 @@ def run(active_files, global_options, module_options):
         active_options.include = [_glob_to_regex(x) for x in active_files]
 
     # used to know when to error a note related to an error
-    matched_error = None
+    matched_error = None  # type: Optional[Tuple[Optional[str], str]]
     errors_by_type = defaultdict(int)  # type: DefaultDict[str, int]
     errors = defaultdict(int)  # type: DefaultDict[str, int]
     warnings = defaultdict(int)  # type: DefaultDict[str, int]
     filtered = defaultdict(int)  # type: DefaultDict[str, int]
+    missing_imports = defaultdict(set)  # type: DefaultDict[str, Set[str]]
     last_error = None  # type: Optional[Tuple[Options, Any, Any, Any, str]]
 
     output = proc.stdout or []  # type: Iterable[bytes]
@@ -330,15 +427,27 @@ def run(active_files, global_options, module_options):
 
             if global_options.show_ignored or new_status:
                 report(global_options, filename, lineno, new_status or 'error',
-                       msg, not new_status, error_code)
+                       msg, is_filtered=not new_status, error_key=error_code)
                 matched_error = new_status, error_code
             else:
                 matched_error = None
+
+            if error_code == 'name-defined':
+                match = NAMED_DEFINED.search(msg)
+                if match:
+                    obj = match.group(1)
+                    if obj in EXTRA_TYPING_TYPES:
+                        missing_imports[filename].add(obj)
+
         elif status == 'note' and matched_error is not None:
+            match = IMPORT_SUGGESTION.search(msg)
+            if match:
+                missing_imports[filename].add(match.group(1))
             report(global_options, filename, lineno, status, msg,
-                   not matched_error[0], matched_error[1])
+                   is_filtered=not matched_error[0], error_key=matched_error[1])
         elif status == 'note' and msg.startswith(REVEALED_TYPE):
-            report(global_options, filename, lineno, status, msg, False)
+            report(global_options, filename, lineno, status, msg,
+                   is_filtered=False)
 
     def print_stat(key, value):
         print("{:.<50}{:.>8}".format(key, value))
@@ -366,6 +475,11 @@ def run(active_files, global_options, module_options):
         print_stat("Clean files", len(clean_files))
         # for x in sorted(clean_files):
         #     print(x)
+
+    if global_options.add_missing_imports and missing_imports:
+        print()
+        for filename, imports in missing_imports.items():
+            add_typing_imports(filename, imports)
 
     returncode = proc.wait()
     if returncode > 1:
@@ -682,7 +796,7 @@ class JsonEnvVarOptionsParser(JsonOptionsParser):
 def get_parser():
     # type: () -> argparse.ArgumentParser
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(prog='mypyrun')
 
     def add_invertible_flag(flag, help, inverse=None):
         if inverse is None:
@@ -714,6 +828,11 @@ def get_parser():
     parser.add_argument("--show-ignored", "-x",
                         help="Show errors that have been ignored (darker"
                              " if using color)",
+                        action="store_true")
+    parser.add_argument("--add-missing-imports",
+                        help="Add missing typing imports. This will detect mypy errors "
+                             "related to missing classes from the typing module and "
+                             "automatically insert them into the file",
                         action="store_true")
     parser.add_argument("--options",  "-o",
                         help="Override the default options to use the named"

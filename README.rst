@@ -19,6 +19,7 @@ Features
 - Display colorized output
 - Convert specific errors to warnings
 - Filter specific errors and warnings
+- Automatically insert missing `typing` imports (see `--add-missing-imports` below)
 
 Compatibility
 -------------
@@ -30,13 +31,8 @@ Options
 
 ::
 
-    usage: mypyrun.py [-h] [--version] [--daemon] [--select SELECT [SELECT ...]]
-                      [--ignore IGNORE [IGNORE ...]] [--warn WARN [WARN ...]]
-                      [--color] [--show-ignored] [--options OPTIONS]
-                      [--config-file CONFIG_FILE] [--files FILES [FILES ...]]
-                      [--warning-filters WARNING_FILTERS [WARNING_FILTERS ...]]
-                      [--error-filters ERROR_FILTERS [ERROR_FILTERS ...]]
-                      [--mypy-executable MYPY_EXECUTABLE]
+    usage: mypyrun [-h] [--version] [--daemon] [--select SELECT [SELECT ...]] [--ignore IGNORE [IGNORE ...]] [--warn WARN [WARN ...]] [--color] [--show-ignored] [--add-missing-imports] [--options OPTIONS] [--config-file CONFIG_FILE]
+                      [--files FILES [FILES ...]] [--warning-filters WARNING_FILTERS [WARNING_FILTERS ...]] [--error-filters ERROR_FILTERS [ERROR_FILTERS ...]] [--mypy-executable MYPY_EXECUTABLE]
                       [ARG [ARG ...]]
 
     positional arguments:
@@ -53,23 +49,19 @@ Options
       --warn WARN [WARN ...], -w WARN [WARN ...]
                             Errors to convert into warnings
       --color               Colorize output (inverse: --no-color)
-      --show-ignored, -x    Show errors that have been ignored (darker if using
-                            color)
+      --show-ignored, -x    Show errors that have been ignored (darker if using color)
+      --add-missing-imports
+                            Add missing typing imports. This will detect mypy errors related to missing classes from the typing module and automatically insert them into the file
       --options OPTIONS, -o OPTIONS
-                            Override the default options to use the
-                            namedconfiguration section (e.g. pass --options=foo to
-                            use the [mypyrun-foo] section)
+                            Override the default options to use the namedconfiguration section (e.g. pass --options=foo to use the [mypyrun-foo] section)
       --config-file CONFIG_FILE, -c CONFIG_FILE
                             Specific configuration file.
       --files FILES [FILES ...]
-                            Files to isolate (triggers use of 'active'options for
-                            these files)
+                            Files to isolate (triggers use of 'active'options for these files)
       --warning-filters WARNING_FILTERS [WARNING_FILTERS ...]
-                            Regular expression to ignore messages flagged as
-                            warnings
+                            Regular expression to ignore messages flagged as warnings
       --error-filters ERROR_FILTERS [ERROR_FILTERS ...]
-                            Regular expression to ignore messages flagged as
-                            errors
+                            Regular expression to ignore messages flagged as errors
       --mypy-executable MYPY_EXECUTABLE
                             Path to the mypy executable
 
