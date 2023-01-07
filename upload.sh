@@ -2,14 +2,15 @@
 set -e
 git push
 rm -rf dist
-python3 setup.py sdist bdist_wheel
+
+poetry build
 
 if [[ -z $1 ]]; then
     echo "doing test release (pass a version to do official release)"
-    twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+    poetry publish -r testpypi
 else
     echo "doing official release"
-    twine upload dist/*
+    poetry publish
     git tag "$1"
     git push --tags
 fi
