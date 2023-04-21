@@ -353,17 +353,15 @@ def run(active_files, global_options, module_options):
     """
     if global_options.daemon:
         executable = 'dmypy'
-        if global_options.mypy_executable:
-            basedir = os.path.dirname(global_options.mypy_executable)
-            executable = os.path.join(basedir, executable)
         args = ['run', '--']
     else:
         executable = 'mypy'
         args = []
 
     if global_options.mypy_executable:
-        basedir = os.path.dirname(global_options.mypy_executable)
-        executable = os.path.join(basedir, executable)
+        mypy_executable = os.path.abspath(os.path.expandvars(global_options.mypy_executable))
+        mypy_executable_dir = os.path.dirname(mypy_executable)
+        executable = os.path.join(mypy_executable_dir, executable)
 
     args.append('--show-error-codes')
 
