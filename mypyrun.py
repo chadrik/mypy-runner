@@ -146,7 +146,7 @@ class Options(object):
     color = True
     show_ignored = False
     daemon = False
-    mypy_executable = None  # type: Optional[str]
+    mypy_executable = ''  # type: Optional[str]
     add_missing_imports = False
 
     def __init__(self):
